@@ -79,9 +79,11 @@
   </form>
 </section>
 
-<!-- Tabletten-Dosierer Einstellungen -->
+<!-- Chlor-Tab-Dosierer Einstellungen -->
 <section class="card">
-  <h2>Tabletten-Dosierer</h2>
+  <h2>Chlor-Tab-Dosierer</h2>
+  <p class="muted small">Einstellungen für den Tab, der aktuell im Pool liegt (Anzeige auf der
+    <a href="{{ base }}/">Messung</a>-Seite). Nur für den eingelegten Tab – nicht für deinen Vorrat.</p>
   <form method="post" action="{{ base }}/config/dispenser">
     <div class="grid2">
       <label>Name des Dosierers
@@ -91,14 +93,19 @@
         <input type="text" inputmode="decimal" name="tablet_weight_g"
                value="{{ '%g'|format(dispenser.tablet_weight_g) }}">
       </label>
-      <label>Geschätzter Verbrauch (Tabs/Tag)
-        <input type="text" inputmode="decimal" name="daily_consumption_tabs"
-               value="{{ '%g'|format(dispenser.daily_consumption_tabs) }}"
-               placeholder="z. B. 0,5">
+      <label>Haltbarkeit pro Tab (Tage)
+        <input type="text" inputmode="decimal" name="tab_lifetime_days"
+               value="{{ '%g'|format(dispenser.tab_lifetime_days) }}"
+               placeholder="z. B. 10">
+      </label>
+      <label>Tabs gleichzeitig im Dosierer
+        <input type="text" inputmode="numeric" name="current_count"
+               value="{{ dispenser.current_count }}"
+               placeholder="im Regelfall 1">
       </label>
     </div>
-    <p class="muted small">Der Verbrauch ist abhängig von Beckenvolumen, Wassertemperatur und
-      Durchfluss durch den Dosierer. Passe den Wert anhand deiner Erfahrung an.</p>
+    <p class="muted small">Die Haltbarkeit hängt von Beckengröße, Wassertemperatur und Durchfluss ab –
+      beobachte, wie lange ein Tab bei dir hält, und trage den Erfahrungswert ein.</p>
     <button type="submit" class="btn small">Dosierer speichern</button>
   </form>
 </section>

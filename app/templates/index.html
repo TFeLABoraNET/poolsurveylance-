@@ -108,46 +108,48 @@
   <p class="muted small">Tipp: Felder sind mit deiner letzten Messung vorbelegt – einfach die geänderten Werte anpassen.</p>
 </section>
 
-<!-- Tabletten-Dosierer Widget -->
+<!-- Chlor-Tab im Dosierer (aktuell im Pool) -->
 <section class="card">
-  <h2>Chlortabletten-Dosierer</h2>
+  <h2>Chlor-Tab im Dosierer</h2>
+  <p class="muted small">Der Tab, der gerade im {{ dispenser.name }} liegt und sich langsam auflöst.
+    Das ist <em>nicht</em> dein Vorrat – deinen Vorrat an Granulat/Flüssigkeiten führst du im
+    <a href="{{ base }}/inventory">Lager</a>.</p>
   <div class="dispenser-row">
     <div class="dispenser-info">
-      <div class="disp-count {% if dispenser.current_count <= 1 %}disp-low{% elif dispenser.current_count <= 3 %}disp-warn{% else %}disp-ok{% endif %}">
-        {{ dispenser.current_count }}
-      </div>
-      <div class="muted small">{{ dispenser.name }} · {{ "%g"|format(dispenser.tablet_weight_g) }} g/Tab</div>
-      {% if days_left is not none %}
-      <div class="small {% if days_left <= 3 %}text-danger{% elif days_left <= 7 %}text-warn{% endif %}">
-        ≈ {{ days_left }} Tage verbleibend
-      </div>
-      {% endif %}
-      {% if dispenser.last_refill_at %}
-      <div class="muted small">Letztes Nachfüllen: {{ dispenser.last_refill_at.strftime("%d.%m.%Y") }}</div>
-      {% endif %}
-      {% if dispenser.current_count <= 1 %}
-      <div class="flash warn" style="margin-top:.4rem">⚠ Tabletten fast leer – bitte nachfüllen!</div>
+      {% if tab.inserted %}
+        <div class="disp-count {% if tab.depleted %}disp-low{% elif tab.days_left <= 2 %}disp-warn{% else %}disp-ok{% endif %}">
+          {% if tab.depleted %}0{% else %}{{ tab.days_left }}{% endif %}
+        </div>
+        <div class="muted small">
+          {% if tab.depleted %}Tag(e) überfällig{% else %}Tage verbleibend (geschätzt){% endif %}
+        </div>
+        <div class="muted small" style="margin-top:.3rem">
+          Eingelegt am {{ tab.inserted_at.strftime("%d.%m.%Y") }}
+          (vor {{ tab.days_used }} Tag{{ "en" if tab.days_used != 1 else "" }})
+        </div>
+        <div class="muted small">Haltbarkeit/Tab: {{ "%g"|format(tab.lifetime_days) }} Tage · {{ "%g"|format(dispenser.tablet_weight_g) }} g/Tab</div>
+        {% if tab.depleted %}
+        <div class="flash warn" style="margin-top:.4rem">⚠ Der Tab ist vermutlich aufgebraucht – neuen einlegen.</div>
+        {% endif %}
+      {% else %}
+        <div class="disp-count disp-low">–</div>
+        <div class="muted small">Kein Tab eingelegt</div>
+        <div class="flash warn" style="margin-top:.4rem">⚠ Aktuell liegt kein Tab im Dosierer. Lege einen ein.</div>
       {% endif %}
     </div>
     <div class="dispenser-forms">
-      <form method="post" action="{{ base }}/dispenser/update" class="disp-form">
-        <input type="hidden" name="is_refill" value="0">
-        <label class="small">Aktueller Bestand
-          <input type="text" inputmode="numeric" name="current_count"
-                 value="{{ dispenser.current_count }}" style="width:80px">
-        </label>
-        <button type="submit" class="btn small">Aktualisieren</button>
+      <form method="post" action="{{ base }}/dispenser/refill" class="disp-form">
+        <button type="submit" class="btn primary">🔄 Neuen Tab eingelegt</button>
       </form>
-      <form method="post" action="{{ base }}/dispenser/update" class="disp-form">
-        <input type="hidden" name="is_refill" value="1">
-        <label class="small">Nachgefüllt (Stück)
-          <input type="text" inputmode="numeric" name="current_count"
-                 value="{{ dispenser.current_count }}" style="width:80px">
-        </label>
-        <button type="submit" class="btn small primary">Nachgefüllt</button>
+      {% if tab.inserted %}
+      <form method="post" action="{{ base }}/dispenser/remove" class="disp-form">
+        <button type="submit" class="btn small">Dosierer ist leer</button>
       </form>
+      {% endif %}
     </div>
   </div>
+  <p class="muted small" style="margin-top:.6rem">Haltbarkeit pro Tab und Tablettengewicht stellst du in den
+    <a href="{{ base }}/config">Einstellungen</a> ein.</p>
 </section>
 
 {% endblock %}

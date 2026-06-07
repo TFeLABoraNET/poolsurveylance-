@@ -44,6 +44,7 @@ def migrate_schema(eng) -> None:
         ("chemicals", "min_stock_g", "REAL"),
         ("chemicals", "stock_updated_at", "TEXT"),
         ("pump_logs", "source", "TEXT DEFAULT 'manual'"),
+        ("tablet_dispensers", "tab_lifetime_days", "REAL DEFAULT 10.0"),
     ]
     with eng.connect() as conn:
         for table, col, typedef in new_cols:

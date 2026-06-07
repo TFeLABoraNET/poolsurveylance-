@@ -7,9 +7,11 @@
   <h2>Lagerbestand
     {% if low_count > 0 %}<span class="badge badge-danger">{{ low_count }} niedrig</span>{% endif %}
   </h2>
-  <p class="muted small">Behalte deinen Vorrat im Blick. Mit „verbraucht / gekauft" passt du den
-    Bestand schnell an, ohne Tippen. Lege optional eine Warnschwelle fest – sinkt der Bestand
-    darunter, wird die Chemikalie hervorgehoben.</p>
+  <p class="muted small">Dein Vorrat an Granulat und Flüssigkeiten (in g/ml). Mit „verbraucht / gekauft"
+    passt du den Bestand schnell an, ohne Tippen. Lege optional eine Warnschwelle fest – sinkt der
+    Bestand darunter, wird die Chemikalie hervorgehoben.</p>
+  <p class="muted small">Hinweis: Der Chlor-Tab, der gerade im Dosierer liegt, wird separat auf der
+    <a href="{{ base }}/">Messung</a>-Seite geführt (mit Rest-Schätzung).</p>
 
   {% if not chemicals %}
   <p class="muted">Noch keine Chemikalien angelegt. Lege sie in den <a href="{{ base }}/config">Einstellungen</a> an.</p>

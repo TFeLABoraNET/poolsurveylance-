@@ -99,15 +99,25 @@ class Measurement(Base):
 
 
 class TabletDispenser(Base):
-    """Tabletten-Dosierer – verfolgt den aktuellen Tablettenvorrat."""
+    """Schwimm-/Skimmer-Dosierer – verfolgt den AKTUELL eingelegten Chlor-Tab.
+
+    Bewusst getrennt vom Lager (das Granulat/Flüssigkeiten in g/ml führt):
+    hier geht es nur um die Tablette, die GERADE im Pool liegt und sich
+    langsam auflöst – inkl. Schätzung, wann sie aufgebraucht ist.
+    """
 
     __tablename__ = "tablet_dispensers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(80), default="Dosierer")
+    name: Mapped[str] = mapped_column(String(80), default="Schwimmdosierer")
     tablet_weight_g: Mapped[float] = mapped_column(Float, default=200.0)
-    current_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Wie viele Tabs liegen gleichzeitig im Dosierer (im Regelfall 1).
+    current_count: Mapped[int] = mapped_column(Integer, default=1)
+    # Wann wurde der aktuelle Tab eingelegt?
     last_refill_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Wie lange hält ein Tab ungefähr (Tage)? Grundlage der Rest-Schätzung.
+    tab_lifetime_days: Mapped[float] = mapped_column(Float, default=10.0)
+    # (veraltet, bleibt aus Kompatibilitätsgründen erhalten)
     daily_consumption_tabs: Mapped[float] = mapped_column(Float, default=0.5)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
 

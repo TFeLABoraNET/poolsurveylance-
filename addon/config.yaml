@@ -1,7 +1,7 @@
 # Home-Assistant-Add-on-Konfiguration für PoolSurveylance.
 # Nutzt das per GitHub Actions vorgebaute Image aus der GHCR.
 name: PoolSurveylance
-version: "0.3.0"
+version: "0.4.0"
 slug: poolsurveylance
 description: Pool-Pflege-Assistent – Messwerte erfassen & Dosiervorschläge erhalten
 url: https://github.com/TFeLABoraNET/poolsurveylance-

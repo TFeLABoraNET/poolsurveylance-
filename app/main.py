@@ -103,12 +103,10 @@ def index(request: Request, db: Session = Depends(get_db)):
     chemicals = crud.list_chemicals(db, only_active=True)
     evaluation = evaluate(cfg, latest, chemicals) if latest else None
     dispenser = crud.get_dispenser(db)
-    days_left = None
-    if dispenser.daily_consumption_tabs > 0:
-        days_left = round(dispenser.current_count / dispenser.daily_consumption_tabs, 1)
+    tab = crud.tab_status(dispenser)
     ctx = _base_context(request)
     ctx.update(config=cfg, latest=latest, evaluation=evaluation, saved=False,
-               dispenser=dispenser, days_left=days_left)
+               dispenser=dispenser, tab=tab)
     return templates.TemplateResponse("index.html", ctx)
 
 
@@ -139,22 +137,26 @@ async def add_measurement(request: Request, db: Session = Depends(get_db)):
     chemicals = crud.list_chemicals(db, only_active=True)
     evaluation = evaluate(cfg, measurement, chemicals)
     dispenser = crud.get_dispenser(db)
-    days_left = None
-    if dispenser.daily_consumption_tabs > 0:
-        days_left = round(dispenser.current_count / dispenser.daily_consumption_tabs, 1)
+    tab = crud.tab_status(dispenser)
     ctx = _base_context(request)
     ctx.update(config=cfg, latest=measurement, evaluation=evaluation, saved=True,
-               dispenser=dispenser, days_left=days_left)
+               dispenser=dispenser, tab=tab)
     return templates.TemplateResponse("index.html", ctx)
 
 
-@app.post("/dispenser/update")
-async def update_dispenser_count(request: Request, db: Session = Depends(get_db)):
-    form = await request.form()
+@app.post("/dispenser/refill")
+def dispenser_refill(request: Request, db: Session = Depends(get_db)):
+    """Neuen Tab eingelegt – Einlege-Zeitpunkt auf jetzt setzen."""
     disp = crud.get_dispenser(db)
-    count = _parse_int(form.get("current_count"), disp.current_count)
-    is_refill = form.get("is_refill") == "1"
-    crud.set_dispenser_count(db, disp, count, is_refill)
+    crud.insert_fresh_tab(db, disp)
+    return _redirect(request, "/")
+
+
+@app.post("/dispenser/remove")
+def dispenser_remove(request: Request, db: Session = Depends(get_db)):
+    """Dosierer als leer markieren."""
+    disp = crud.get_dispenser(db)
+    crud.remove_tab(db, disp)
     return _redirect(request, "/")
 
 
@@ -531,9 +533,11 @@ async def update_dispenser(request: Request, db: Session = Depends(get_db)):
     tw = _parse_float(form.get("tablet_weight_g"))
     if tw is not None:
         data["tablet_weight_g"] = tw
-    dc = _parse_float(form.get("daily_consumption_tabs"))
-    if dc is not None:
-        data["daily_consumption_tabs"] = dc
+    lifetime = _parse_float(form.get("tab_lifetime_days"))
+    if lifetime is not None:
+        data["tab_lifetime_days"] = lifetime
+    count = _parse_int(form.get("current_count"), disp.current_count)
+    data["current_count"] = max(1, count)
     if data:
         crud.update_dispenser(db, disp, data)
     return _redirect(request, "/config")

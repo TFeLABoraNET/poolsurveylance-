@@ -158,11 +158,44 @@ def update_dispenser(db: Session, disp: TabletDispenser, data: dict) -> TabletDi
     return disp
 
 
-def set_dispenser_count(db: Session, disp: TabletDispenser, count: int, is_refill: bool = False) -> None:
-    disp.current_count = max(0, count)
-    if is_refill:
-        disp.last_refill_at = datetime.now(timezone.utc)
+def insert_fresh_tab(db: Session, disp: TabletDispenser) -> None:
+    """Neuen Tab einlegen: Einlege-Zeitpunkt auf jetzt setzen."""
+    disp.last_refill_at = datetime.now(timezone.utc)
+    if (disp.current_count or 0) < 1:
+        disp.current_count = 1
     db.commit()
+
+
+def remove_tab(db: Session, disp: TabletDispenser) -> None:
+    """Dosierer als leer markieren (kein Tab eingelegt)."""
+    disp.last_refill_at = None
+    db.commit()
+
+
+def tab_status(disp: TabletDispenser) -> dict:
+    """Status des aktuell eingelegten Tabs: Resttage / aufgebraucht.
+
+    Reine Berechnung (ohne DB-Zugriff), damit testbar.
+    """
+    lifetime = disp.tab_lifetime_days or 0.0
+    if not disp.last_refill_at or lifetime <= 0:
+        return {"inserted": False}
+
+    inserted = disp.last_refill_at
+    if inserted.tzinfo is None:
+        inserted = inserted.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+
+    days_used = (now - inserted).total_seconds() / 86400.0
+    days_left = lifetime - days_used
+    return {
+        "inserted": True,
+        "inserted_at": disp.last_refill_at,
+        "days_used": int(days_used),
+        "days_left": round(days_left, 1),
+        "depleted": days_left <= 0,
+        "lifetime_days": lifetime,
+    }
 
 
 # --- Pumpenlaufzeit-Protokoll --------------------------------------------
