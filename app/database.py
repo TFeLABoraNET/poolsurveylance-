@@ -38,8 +38,12 @@ def migrate_schema(eng) -> None:
         ("pool_config", "cya_warning_level", "REAL DEFAULT 70.0"),
         ("pool_config", "cya_dilution_target", "REAL DEFAULT 30.0"),
         ("pool_config", "backwash_interval_hours", "REAL DEFAULT 50.0"),
+        ("pool_config", "pump_timer_hours", "REAL DEFAULT 8.0"),
+        ("pool_config", "pump_auto_track", "INTEGER DEFAULT 0"),
         ("chemicals", "stock_g", "REAL"),
+        ("chemicals", "min_stock_g", "REAL"),
         ("chemicals", "stock_updated_at", "TEXT"),
+        ("pump_logs", "source", "TEXT DEFAULT 'manual'"),
     ]
     with eng.connect() as conn:
         for table, col, typedef in new_cols:

@@ -47,6 +47,10 @@ class PoolConfig(Base):
     cya_dilution_target: Mapped[float] = mapped_column(Float, default=30.0)
     backwash_interval_hours: Mapped[float] = mapped_column(Float, default=50.0)
 
+    # Pumpen-Timer (automatisches tägliches Tracking)
+    pump_timer_hours: Mapped[float] = mapped_column(Float, default=8.0)
+    pump_auto_track: Mapped[bool] = mapped_column(Integer, default=0)
+
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 
@@ -68,6 +72,7 @@ class Chemical(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     stock_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    min_stock_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     stock_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     is_active: Mapped[bool] = mapped_column(Integer, default=1)
@@ -116,6 +121,8 @@ class PumpLog(Base):
     log_date: Mapped[date] = mapped_column(Date, unique=True)
     runtime_hours: Mapped[float] = mapped_column(Float)
     backwashed: Mapped[bool] = mapped_column(Integer, default=0)
+    # Quelle: "manual" (Hand-Eintrag) oder "auto" (Timer-Tracking)
+    source: Mapped[str] = mapped_column(String(10), default="manual")
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 

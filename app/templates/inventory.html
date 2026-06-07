@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block nav_inventory %}active{% endblock %}
+{% block title %}Lager · {{ app_name }}{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>Lagerbestand
+    {% if low_count > 0 %}<span class="badge badge-danger">{{ low_count }} niedrig</span>{% endif %}
+  </h2>
+  <p class="muted small">Behalte deinen Vorrat im Blick. Mit „verbraucht / gekauft" passt du den
+    Bestand schnell an, ohne Tippen. Lege optional eine Warnschwelle fest – sinkt der Bestand
+    darunter, wird die Chemikalie hervorgehoben.</p>
+
+  {% if not chemicals %}
+  <p class="muted">Noch keine Chemikalien angelegt. Lege sie in den <a href="{{ base }}/config">Einstellungen</a> an.</p>
+  {% endif %}
+
+  <div class="inv-grid">
+    {% for c in chemicals %}
+    {% set is_low = c.id in low_ids %}
+    <div class="inv-card {% if is_low %}inv-low{% endif %} {% if not c.is_active %}inv-inactive{% endif %}">
+      <div class="inv-head">
+        <div>
+          <div class="inv-name">{{ c.name }}</div>
+          <div class="muted small">{{ purposes.get(c.purpose, {}).get("label", c.purpose) }}</div>
+        </div>
+        {% if is_low %}<span class="badge badge-danger">niedrig</span>{% endif %}
+      </div>
+
+      <div class="inv-stock">
+        {% if c.stock_g is not none %}
+        <span class="inv-amount">{{ "%g"|format(c.stock_g) }}</span> <span class="inv-unit">{{ c.unit }}</span>
+        {% else %}
+        <span class="inv-amount muted">–</span>
+        <span class="muted small">kein Bestand erfasst</span>
+        {% endif %}
+      </div>
+      {% if c.min_stock_g is not none %}
+      <div class="muted small">Warnschwelle: {{ "%g"|format(c.min_stock_g) }} {{ c.unit }}</div>
+      {% endif %}
+      {% if c.stock_updated_at %}
+      <div class="muted small">Stand: {{ c.stock_updated_at.strftime("%d.%m.%Y") }}</div>
+      {% endif %}
+
+      <!-- Schnell-Anpassung -->
+      <div class="inv-quick">
+        <form method="post" action="{{ base }}/inventory/{{ c.id }}/adjust" class="inv-quick-form">
+          <input type="hidden" name="sign" value="minus">
+          <input type="text" inputmode="decimal" name="delta" placeholder="Menge" class="inv-delta">
+          <button type="submit" class="btn small">− verbraucht</button>
+        </form>
+        <form method="post" action="{{ base }}/inventory/{{ c.id }}/adjust" class="inv-quick-form">
+          <input type="hidden" name="sign" value="plus">
+          <input type="text" inputmode="decimal" name="delta" placeholder="Menge" class="inv-delta">
+          <button type="submit" class="btn small primary">+ gekauft</button>
+        </form>
+      </div>
+
+      <!-- Genau setzen -->
+      <details class="inv-edit">
+        <summary>Bestand &amp; Warnschwelle genau setzen</summary>
+        <form method="post" action="{{ base }}/inventory/{{ c.id }}/set" class="inv-set-form">
+          <label class="small">Bestand ({{ c.unit }})
+            <input type="text" inputmode="decimal" name="stock_g"
+                   value="{% if c.stock_g is not none %}{{ '%g'|format(c.stock_g) }}{% endif %}">
+          </label>
+          <label class="small">Warnschwelle ({{ c.unit }})
+            <input type="text" inputmode="decimal" name="min_stock_g"
+                   value="{% if c.min_stock_g is not none %}{{ '%g'|format(c.min_stock_g) }}{% endif %}"
+                   placeholder="optional">
+          </label>
+          <button type="submit" class="btn small">Speichern</button>
+        </form>
+      </details>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+{% endblock %}

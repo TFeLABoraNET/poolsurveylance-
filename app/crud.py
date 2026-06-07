@@ -82,10 +82,30 @@ def delete_chemical(db: Session, chem: Chemical) -> None:
     db.commit()
 
 
-def update_chemical_stock(db: Session, chem: Chemical, stock_g: float | None) -> None:
+def update_chemical_stock(db: Session, chem: Chemical, stock_g: float | None,
+                          min_stock_g: float | None = ...) -> None:
     chem.stock_g = stock_g
+    if min_stock_g is not ...:
+        chem.min_stock_g = min_stock_g
     chem.stock_updated_at = datetime.now(timezone.utc)
     db.commit()
+
+
+def adjust_chemical_stock(db: Session, chem: Chemical, delta: float) -> None:
+    """Verändert den Lagerbestand um ``delta`` (negativ = Verbrauch)."""
+    current = chem.stock_g or 0.0
+    chem.stock_g = max(0.0, current + delta)
+    chem.stock_updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+def low_stock_chemicals(db: Session) -> list[Chemical]:
+    """Chemikalien, deren Bestand auf/unter der Warnschwelle liegt."""
+    result = []
+    for c in list_chemicals(db):
+        if c.min_stock_g is not None and c.stock_g is not None and c.stock_g <= c.min_stock_g:
+            result.append(c)
+    return result
 
 
 # --- Messwerte ------------------------------------------------------------
@@ -148,21 +168,67 @@ def set_dispenser_count(db: Session, disp: TabletDispenser, count: int, is_refil
 # --- Pumpenlaufzeit-Protokoll --------------------------------------------
 
 def log_pump(db: Session, log_date: date, runtime_hours: float,
-             backwashed: bool = False, note: str | None = None) -> PumpLog:
+             backwashed: bool = False, note: str | None = None,
+             source: str = "manual") -> PumpLog:
     existing = db.scalars(select(PumpLog).where(PumpLog.log_date == log_date)).first()
     if existing:
         existing.runtime_hours = runtime_hours
         existing.backwashed = backwashed
         existing.note = note
+        existing.source = source
         db.commit()
         db.refresh(existing)
         return existing
     entry = PumpLog(log_date=log_date, runtime_hours=runtime_hours,
-                    backwashed=backwashed, note=note)
+                    backwashed=backwashed, note=note, source=source)
     db.add(entry)
     db.commit()
     db.refresh(entry)
     return entry
+
+
+def get_pump_log(db: Session, log_id: int) -> PumpLog | None:
+    return db.get(PumpLog, log_id)
+
+
+def delete_pump_log(db: Session, entry: PumpLog) -> None:
+    db.delete(entry)
+    db.commit()
+
+
+def backfill_auto_pump_logs(db: Session, cfg: PoolConfig) -> int:
+    """Füllt fehlende Tage automatisch mit dem Timer-Wert (source='auto').
+
+    Wird bei jedem Aufruf der Pumpen-Seite und beim Start ausgeführt.
+    Manuelle Einträge (bereits vorhandene Tage) werden NIE überschrieben.
+    Es wird höchstens 60 Tage rückwirkend aufgefüllt.
+    """
+    from datetime import timedelta
+
+    if not cfg.pump_auto_track or (cfg.pump_timer_hours or 0) <= 0:
+        return 0
+
+    today = date.today()
+    latest = db.scalars(select(PumpLog).order_by(PumpLog.log_date.desc()).limit(1)).first()
+    if latest is None:
+        start = today
+    else:
+        start = latest.log_date + timedelta(days=1)
+    if (today - start).days > 60:
+        start = today - timedelta(days=60)
+
+    created = 0
+    d = start
+    while d <= today:
+        existing = db.scalars(select(PumpLog).where(PumpLog.log_date == d)).first()
+        if existing is None:
+            db.add(PumpLog(log_date=d, runtime_hours=cfg.pump_timer_hours,
+                           backwashed=0, source="auto"))
+            created += 1
+        d += timedelta(days=1)
+    if created:
+        db.commit()
+    return created
 
 
 def list_pump_logs(db: Session, limit: int = 30) -> list[PumpLog]:

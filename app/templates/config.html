@@ -103,11 +103,12 @@
   </form>
 </section>
 
-<!-- Chemikalien & Lagerbestand -->
+<!-- Chemikalien -->
 <section class="card">
   <h2>Chemikalien</h2>
   <p class="muted small">Trage die Dosierung so ein, wie sie auf der Verpackung steht
-    („Menge pro Volumen ändert den Wert um …"). Daraus berechnet die App die nötige Menge für dein Becken.</p>
+    („Menge pro Volumen ändert den Wert um …"). Daraus berechnet die App die nötige Menge für dein Becken.
+    Den Lagerbestand verwaltest du komfortabel unter <a href="{{ base }}/inventory">Lager</a>.</p>
 
   {% for c in chemicals %}
   <div class="chem-block">
@@ -144,23 +145,6 @@
         <button type="submit" class="btn small">Speichern</button>
         <button type="submit" class="btn small danger" formaction="{{ base }}/config/chemicals/{{ c.id }}/delete">Löschen</button>
       </div>
-    </form>
-
-    <!-- Lagerbestand -->
-    <form method="post" action="{{ base }}/config/chemicals/{{ c.id }}/stock" class="stock-form">
-      <label class="small">Lagerbestand ({{ c.unit }})
-        <input type="text" inputmode="decimal" name="stock_g"
-               value="{% if c.stock_g is not none %}{{ '%g'|format(c.stock_g) }}{% endif %}"
-               placeholder="aktueller Vorrat"
-               style="width:110px">
-        <button type="submit" class="btn small">Speichern</button>
-        {% if c.stock_g is not none %}
-        <span class="muted small">
-          · {{ '%g'|format(c.stock_g) }} {{ c.unit }} vorhanden
-          {% if c.stock_updated_at %}(Stand {{ c.stock_updated_at.strftime("%d.%m.%Y") }}){% endif %}
-        </span>
-        {% endif %}
-      </label>
     </form>
   </div>
   {% endfor %}

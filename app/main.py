@@ -14,7 +14,10 @@ from sqlalchemy.orm import Session
 
 from . import crud
 from .checklists import CHECKLISTS
-from .chemistry import PARAMETERS, PURPOSES, cya_dilution_volume, evaluate, shock_dose, _pick
+from .chemistry import (
+    PARAMETERS, PURPOSES, cya_dilution_volume, evaluate,
+    recommend_pump_runtime, shock_dose, _pick,
+)
 from .config import settings
 from .database import Base, engine, get_db, migrate_schema
 from .models import Measurement
@@ -32,6 +35,8 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         crud.seed_defaults(db)
+        # Automatisches Pumpen-Tracking nachholen (fehlende Tage füllen)
+        crud.backfill_auto_pump_logs(db, crud.get_config(db))
     finally:
         db.close()
     pool_mqtt.start()
@@ -204,12 +209,18 @@ def trend_data(db: Session = Depends(get_db)):
 @app.get("/pump-log", response_class=HTMLResponse)
 def pump_log_page(request: Request, db: Session = Depends(get_db)):
     cfg = crud.get_config(db)
+    # Fehlende Tage automatisch nachtragen (Timer-Tracking)
+    crud.backfill_auto_pump_logs(db, cfg)
     logs = crud.list_pump_logs(db, limit=30)
     stats = crud.get_pump_stats(db, cfg.backwash_interval_hours)
+    latest = crud.latest_measurement(db)
+    temp = latest.temperature if latest else None
+    recommendation = recommend_pump_runtime(cfg.volume_m3, cfg.pump_flow_m3h, temp)
     today = date.today()
     today_log = next((l for l in logs if l.log_date == today), None)
     ctx = _base_context(request)
-    ctx.update(logs=logs, stats=stats, today=today, today_log=today_log, config=cfg)
+    ctx.update(logs=logs, stats=stats, today=today, today_log=today_log,
+               config=cfg, recommendation=recommendation, water_temp=temp)
     return templates.TemplateResponse("pump_log.html", ctx)
 
 
@@ -224,7 +235,28 @@ async def add_pump_log(request: Request, db: Session = Depends(get_db)):
     hours = _parse_float(form.get("runtime_hours")) or 0.0
     backwashed = form.get("backwashed") == "on"
     note = (form.get("note") or "").strip() or None
-    crud.log_pump(db, log_date, hours, backwashed, note)
+    crud.log_pump(db, log_date, hours, backwashed, note, source="manual")
+    return _redirect(request, "/pump-log")
+
+
+@app.post("/pump-log/timer")
+async def update_pump_timer(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    cfg = crud.get_config(db)
+    hours = _parse_float(form.get("pump_timer_hours"))
+    if hours is not None:
+        cfg.pump_timer_hours = hours
+    cfg.pump_auto_track = 1 if form.get("pump_auto_track") else 0
+    db.commit()
+    crud.backfill_auto_pump_logs(db, cfg)
+    return _redirect(request, "/pump-log")
+
+
+@app.post("/pump-log/{log_id}/delete")
+def delete_pump_log(log_id: int, request: Request, db: Session = Depends(get_db)):
+    entry = crud.get_pump_log(db, log_id)
+    if entry:
+        crud.delete_pump_log(db, entry)
     return _redirect(request, "/pump-log")
 
 
@@ -446,15 +478,46 @@ def remove_chemical(chem_id: int, request: Request, db: Session = Depends(get_db
     return _redirect(request, "/config")
 
 
-@app.post("/config/chemicals/{chem_id}/stock")
-async def update_stock(chem_id: int, request: Request, db: Session = Depends(get_db)):
+# --------------------------------------------------------------------------
+# Lager / Vorrat
+# --------------------------------------------------------------------------
+
+@app.get("/inventory", response_class=HTMLResponse)
+def inventory_page(request: Request, db: Session = Depends(get_db)):
+    chemicals = crud.list_chemicals(db)
+    low = crud.low_stock_chemicals(db)
+    low_ids = {c.id for c in low}
+    ctx = _base_context(request)
+    ctx.update(chemicals=chemicals, low_ids=low_ids, low_count=len(low))
+    return templates.TemplateResponse("inventory.html", ctx)
+
+
+@app.post("/inventory/{chem_id}/set")
+async def inventory_set(chem_id: int, request: Request, db: Session = Depends(get_db)):
     chem = crud.get_chemical(db, chem_id)
     if chem is None:
-        return _redirect(request, "/config")
+        return _redirect(request, "/inventory")
     form = await request.form()
     stock = _parse_float(form.get("stock_g"))
-    crud.update_chemical_stock(db, chem, stock)
-    return _redirect(request, "/config")
+    min_stock = _parse_float(form.get("min_stock_g"))
+    crud.update_chemical_stock(db, chem, stock, min_stock)
+    return _redirect(request, "/inventory")
+
+
+@app.post("/inventory/{chem_id}/adjust")
+async def inventory_adjust(chem_id: int, request: Request, db: Session = Depends(get_db)):
+    chem = crud.get_chemical(db, chem_id)
+    if chem is None:
+        return _redirect(request, "/inventory")
+    form = await request.form()
+    delta = _parse_float(form.get("delta")) or 0.0
+    sign = form.get("sign", "minus")
+    if sign == "minus":
+        delta = -abs(delta)
+    else:
+        delta = abs(delta)
+    crud.adjust_chemical_stock(db, chem, delta)
+    return _redirect(request, "/inventory")
 
 
 @app.post("/config/dispenser")

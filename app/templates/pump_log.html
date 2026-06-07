@@ -3,9 +3,68 @@
 {% block title %}Pumpenlaufzeit · {{ app_name }}{% endblock %}
 {% block content %}
 
+<!-- Empfehlung -->
+<section class="card">
+  <h2>Empfohlene Laufzeit</h2>
+  {% if recommendation.recommended is defined %}
+  <div class="rec-hero">
+    <div class="rec-value">{{ "%g"|format(recommendation.recommended) }} <span class="unit">h / Tag</span></div>
+    <div class="muted small">Richtwert für dein Becken ({{ "%g"|format(config.volume_m3) }} m³,
+      {{ "%g"|format(config.pump_flow_m3h) }} m³/h{% if water_temp is not none %}, {{ "%g"|format(water_temp) }} °C{% endif %})</div>
+  </div>
+  <div class="rec-detail">
+    {% if recommendation.turnover_hours is defined %}
+    <div class="rec-item">
+      <span class="muted small">Umwälzzeit (1×)</span>
+      <strong>{{ "%g"|format(recommendation.turnover_hours) }} h</strong>
+    </div>
+    <div class="rec-item">
+      <span class="muted small">2 Umwälzungen/Tag</span>
+      <strong>{{ "%g"|format(recommendation.two_turnovers) }} h</strong>
+    </div>
+    {% endif %}
+    {% if recommendation.temp_rule is defined %}
+    <div class="rec-item">
+      <span class="muted small">Temperaturregel (°C ÷ 2)</span>
+      <strong>{{ "%g"|format(recommendation.temp_rule) }} h</strong>
+    </div>
+    {% endif %}
+  </div>
+  <p class="muted small">Faustregel: Das Wasser sollte pro Tag etwa 2× komplett umgewälzt werden;
+    je wärmer das Wasser, desto länger. Bei Hitze, viel Badebetrieb oder Algenneigung eher mehr.
+    {% if water_temp is none %}<br>Trage eine Wassertemperatur ein, um die Empfehlung zu verfeinern.{% endif %}</p>
+  {% else %}
+  <p class="muted">Bitte Beckenvolumen und Pumpen-Durchfluss in den <a href="{{ base }}/config">Einstellungen</a> hinterlegen.</p>
+  {% endif %}
+</section>
+
+<!-- Timer / Auto-Tracking -->
+<section class="card">
+  <h2>Pumpen-Timer (automatisches Tracking)</h2>
+  <p class="muted small">Wenn deine Pumpe über einen Timer täglich dieselbe Zeit läuft, trage sie hier
+    einmal ein. Die App protokolliert diese Laufzeit dann automatisch für jeden Tag –
+    manuelle Einträge (z. B. an Tagen mit längerem Betrieb) überschreiben den Automatik-Wert.</p>
+  <form method="post" action="{{ base }}/pump-log/timer">
+    <div class="grid2">
+      <label>Tägliche Timer-Laufzeit (Stunden)
+        <input type="text" inputmode="decimal" name="pump_timer_hours"
+               value="{{ '%g'|format(config.pump_timer_hours) }}" placeholder="z. B. 8">
+      </label>
+      <label class="checkbox-inline" style="margin-top:1.9rem">
+        <input type="checkbox" name="pump_auto_track" {% if config.pump_auto_track %}checked{% endif %}>
+        Automatisches Tracking aktiv
+      </label>
+    </div>
+    <button type="submit" class="btn primary" style="margin-top:.4rem">Timer speichern</button>
+    {% if config.pump_auto_track %}
+    <span class="badge" style="margin-left:.5rem">Auto-Tracking läuft</span>
+    {% endif %}
+  </form>
+</section>
+
 <!-- Statistik-Karten -->
 <section class="card">
-  <h2>Pumpenlaufzeit</h2>
+  <h2>Statistik</h2>
   <div class="stat-grid">
     <div class="stat-card">
       <div class="stat-label">Diese Woche</div>
@@ -47,7 +106,7 @@
       </label>
       <label>Laufzeit (Stunden)
         <input type="text" inputmode="decimal" name="runtime_hours"
-               value="{% if today_log %}{{ '%g'|format(today_log.runtime_hours) }}{% else %}8{% endif %}"
+               value="{% if today_log %}{{ '%g'|format(today_log.runtime_hours) }}{% else %}{{ '%g'|format(config.pump_timer_hours) }}{% endif %}"
                placeholder="z. B. 8">
       </label>
     </div>
@@ -73,8 +132,10 @@
         <tr>
           <th>Datum</th>
           <th>Laufzeit</th>
+          <th>Quelle</th>
           <th>Rückgespült</th>
           <th>Notiz</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -82,15 +143,27 @@
         <tr {% if l.backwashed %}class="row-highlight"{% endif %}>
           <td>{{ l.log_date.strftime("%d.%m.%Y") }}</td>
           <td>{{ "%g"|format(l.runtime_hours) }} h</td>
+          <td>
+            {% if l.source == "auto" %}
+            <span class="badge small">Timer</span>
+            {% else %}
+            <span class="badge small">manuell</span>
+            {% endif %}
+          </td>
           <td>{% if l.backwashed %}✓{% else %}–{% endif %}</td>
           <td class="note">{{ l.note or "" }}</td>
+          <td>
+            <form method="post" action="{{ base }}/pump-log/{{ l.id }}/delete" style="margin:0">
+              <button type="submit" class="btn small danger" title="Eintrag löschen">✕</button>
+            </form>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <p class="muted">Noch keine Einträge. Trage deinen ersten Pumpentag ein!</p>
+  <p class="muted">Noch keine Einträge. Trage deinen ersten Pumpentag ein oder aktiviere den Timer oben.</p>
   {% endif %}
 </section>
 

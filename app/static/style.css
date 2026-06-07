@@ -147,6 +147,39 @@ input:focus, select:focus { outline: 2px solid var(--primary); border-color: var
 
 .badge { background: var(--primary); color: #fff; padding: .15rem .5rem; border-radius: 6px; font-size: .75rem; }
 .badge.small { background: var(--line); color: var(--muted); }
+.badge-danger { background: var(--high); color: #fff; }
+
+/* ---- Pumpen-Empfehlung ---- */
+.rec-hero { margin-bottom: .8rem; }
+.rec-value { font-size: 2.4rem; font-weight: 700; color: var(--primary); line-height: 1; }
+.rec-value .unit { font-size: .9rem; font-weight: 400; color: var(--muted); }
+.rec-detail { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: .6rem; }
+.rec-item {
+  background: var(--card-2); border-radius: 8px; padding: .5rem .8rem;
+  display: flex; flex-direction: column; min-width: 130px;
+}
+.rec-item strong { font-size: 1.1rem; }
+
+/* ---- Lager / Inventory ---- */
+.inv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .9rem; }
+.inv-card {
+  background: var(--card-2); border: 1px solid var(--line);
+  border-radius: 10px; padding: .9rem 1rem; border-left: 4px solid var(--line);
+}
+.inv-low { border-left-color: var(--high); }
+.inv-inactive { opacity: .6; }
+.inv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: .4rem; }
+.inv-name { font-weight: 600; font-size: 1.05rem; }
+.inv-stock { margin: .5rem 0 .2rem; }
+.inv-amount { font-size: 1.9rem; font-weight: 700; }
+.inv-unit { color: var(--muted); }
+.inv-quick { display: flex; gap: .5rem; flex-wrap: wrap; margin: .7rem 0 .3rem; }
+.inv-quick-form { display: flex; gap: .3rem; align-items: center; margin: 0; }
+.inv-delta { width: 70px !important; margin: 0 !important; }
+.inv-edit summary { cursor: pointer; color: var(--primary); font-size: .85rem; padding: .4rem 0; }
+.inv-set-form { display: flex; gap: .5rem; align-items: flex-end; flex-wrap: wrap; }
+.inv-set-form label { margin: .2rem 0; }
+.inv-set-form input { width: 110px; }
 
 .footer {
   max-width: 900px; margin: 0 auto; padding: 1rem;

@@ -145,6 +145,43 @@ def shock_dose(chem: Chemical, current_fc: float, target_fc: float, volume_m3: f
     return _round_dose(required_dose(chem, delta, volume_m3))
 
 
+def recommend_pump_runtime(volume_m3: float, flow_m3h: float,
+                           temperature: float | None = None) -> dict:
+    """Empfohlene tägliche Pumpenlaufzeit.
+
+    Kombiniert zwei gängige Faustregeln:
+
+    * **Umwälzung:** Das Beckenwasser sollte pro Tag etwa 2× komplett umgewälzt
+      werden. Umwälzzeit = Volumen / Durchfluss; Empfehlung = 2 × Umwälzzeit.
+    * **Temperaturregel:** Laufzeit (h) ≈ Wassertemperatur (°C) / 2. Je wärmer
+      das Wasser, desto mehr Filterung/Chlorbedarf.
+
+    Empfohlen wird der höhere der beiden Werte (auf halbe Stunden gerundet,
+    sinnvoll begrenzt auf 4–16 h/Tag).
+    """
+    result: dict = {}
+    candidates: list[float] = []
+
+    if flow_m3h and flow_m3h > 0 and volume_m3 > 0:
+        turnover = volume_m3 / flow_m3h
+        result["turnover_hours"] = round(turnover, 1)
+        two_turnovers = round(turnover * 2 * 2) / 2  # auf 0,5 h runden
+        result["two_turnovers"] = two_turnovers
+        candidates.append(two_turnovers)
+
+    if temperature is not None:
+        temp_rule = round(temperature / 2 * 2) / 2
+        result["temp_rule"] = temp_rule
+        candidates.append(temp_rule)
+
+    if candidates:
+        rec = max(candidates)
+        rec = max(4.0, min(16.0, rec))  # sinnvoll begrenzen
+        result["recommended"] = round(rec * 2) / 2
+
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Hauptfunktion
 # ---------------------------------------------------------------------------

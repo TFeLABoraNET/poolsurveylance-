@@ -1,6 +1,8 @@
 """Tests für die Dosier-Logik."""
 
-from app.chemistry import evaluate, required_dose
+from app.chemistry import (
+    cya_dilution_volume, evaluate, recommend_pump_runtime, required_dose,
+)
 from app.models import Chemical, Measurement, PoolConfig
 
 
@@ -91,3 +93,31 @@ def test_missing_values_are_unknown():
     statuses = {s.key: s.status for s in ev.statuses}
     assert statuses["ph"] == "unknown"
     assert ev.suggestions == []
+
+
+def test_pump_recommendation_uses_turnover_and_temp():
+    # 30 m³ / 10 m³/h -> Umwälzzeit 3 h -> 2 Umwälzungen = 6 h
+    rec = recommend_pump_runtime(volume_m3=30.0, flow_m3h=10.0, temperature=None)
+    assert rec["turnover_hours"] == 3.0
+    assert rec["two_turnovers"] == 6.0
+    assert rec["recommended"] == 6.0
+
+
+def test_pump_recommendation_temp_rule_wins_when_higher():
+    # Temperaturregel 28/2 = 14 h schlägt 2 Umwälzungen (6 h)
+    rec = recommend_pump_runtime(volume_m3=30.0, flow_m3h=10.0, temperature=28.0)
+    assert rec["temp_rule"] == 14.0
+    assert rec["recommended"] == 14.0
+
+
+def test_pump_recommendation_capped():
+    # Sehr kleiner Durchfluss -> Empfehlung auf max. 16 h begrenzt
+    rec = recommend_pump_runtime(volume_m3=100.0, flow_m3h=2.0, temperature=None)
+    assert rec["recommended"] == 16.0
+
+
+def test_cya_dilution_volume():
+    # 80 -> 40 bei 10 m³: 50 % von 10 m³ = 5000 L
+    assert cya_dilution_volume(80, 40, 10.0) == 5000
+    # Ziel >= aktuell -> kein Tausch
+    assert cya_dilution_volume(40, 40, 10.0) == 0.0
