@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block nav_tools %}active{% endblock %}
+{% block title %}Rechner · {{ app_name }}{% endblock %}
+{% block content %}
+
+<!-- Stoßchlorierung -->
+<section class="card">
+  <h2>Stoßchlorierungs-Rechner</h2>
+  <p class="muted small">Berechnet die Menge Chlor, um eine Stoßchlorung durchzuführen.
+    Ziel ist es, das freie Chlor kurzzeitig auf ≥ 10 mg/l zu bringen
+    (oder auf den 10-fachen Wert des gebundenen Chlors).</p>
+
+  <form method="post" action="{{ base }}/tools/shock">
+    <div class="grid2">
+      <label>Schock-Chemikalie
+        <select name="chem_id">
+          {% for c in shock_chems %}
+          <option value="{{ c.id }}"
+            {% if shock_form is defined and shock_form.get('chem_id')|string == c.id|string %}selected{% endif %}>
+            {{ c.name }}
+          </option>
+          {% endfor %}
+          {% if not shock_chems %}
+          <option value="">Keine Schock-Chemikalie konfiguriert</option>
+          {% endif %}
+        </select>
+      </label>
+      <label>Beckenvolumen (m³)
+        <input type="text" inputmode="decimal" name="volume_m3"
+               value="{% if shock_form is defined %}{{ shock_form.get('volume_m3', config.volume_m3) }}{% else %}{{ '%g'|format(config.volume_m3) }}{% endif %}">
+      </label>
+      <label>Aktuelles freies Chlor (mg/l)
+        <input type="text" inputmode="decimal" name="current_fc"
+               value="{% if shock_form is defined %}{{ shock_form.get('current_fc', '') }}{% elif latest and latest.free_cl is not none %}{{ '%g'|format(latest.free_cl) }}{% endif %}"
+               placeholder="z. B. 0,5">
+      </label>
+      <label>Ziel freies Chlor (mg/l)
+        <input type="text" inputmode="decimal" name="target_fc"
+               value="{% if shock_form is defined %}{{ shock_form.get('target_fc', '10') }}{% else %}10{% endif %}"
+               placeholder="Standard: 10">
+      </label>
+    </div>
+    <button type="submit" class="btn primary" style="margin-top:.6rem">Berechnen</button>
+  </form>
+
+  {% if shock_result %}
+  <div class="result-box">
+    <div class="result-title">Ergebnis</div>
+    <div class="result-amount">{{ "%g"|format(shock_result.amount) }} {{ shock_result.chem.unit }}</div>
+    <div class="muted small">
+      {{ shock_result.chem.name }} · Becken {{ "%g"|format(shock_result.volume_m3) }} m³ ·
+      Chlor von {{ "%g"|format(shock_result.current_fc) }} auf {{ "%g"|format(shock_result.target_fc) }} mg/l heben
+    </div>
+    <div class="flash warn" style="margin-top:.6rem">
+      ⚠ Schockprodukt am besten abends zugeben. Becken 8–24 h meiden bis Chlor auf &lt; 3 mg/l
+      gefallen ist. Anschließend nachmessen.
+    </div>
+  </div>
+  {% endif %}
+
+  {% if not shock_chems %}
+  <div class="flash warn">Kein Chlor-Schock-Produkt konfiguriert. Bitte unter <a href="{{ base }}/config">Einstellungen → Chemikalien</a> ein Schock-Granulat anlegen.</div>
+  {% endif %}
+</section>
+
+<!-- CYA-Verdünnungsrechner -->
+<section class="card">
+  <h2>CYA-Verdünnungs-Rechner</h2>
+  <p class="muted small">Chlortabletten (Quatrotabs / 200-g-Tabs) enthalten Cyanursäure (CYA).
+    Wird der CYA-Spiegel zu hoch (> 70 mg/l), verliert Chlor an Wirkung.
+    Dieser Rechner ermittelt, wie viel Wasser du tauschen musst, um CYA zu senken.</p>
+
+  <form method="post" action="{{ base }}/tools/cya">
+    <div class="grid2">
+      <label>Beckenvolumen (m³)
+        <input type="text" inputmode="decimal" name="volume_m3"
+               value="{% if cya_form is defined %}{{ cya_form.get('volume_m3', config.volume_m3) }}{% else %}{{ '%g'|format(config.volume_m3) }}{% endif %}">
+      </label>
+      <label>Aktueller CYA-Wert (mg/l)
+        <input type="text" inputmode="decimal" name="current_cya"
+               value="{% if cya_form is defined %}{{ cya_form.get('current_cya', '') }}{% elif latest and latest.cya is not none %}{{ '%g'|format(latest.cya) }}{% endif %}"
+               placeholder="z. B. 80">
+      </label>
+      <label>Ziel-CYA (mg/l)
+        <input type="text" inputmode="decimal" name="target_cya"
+               value="{% if cya_form is defined %}{{ cya_form.get('target_cya', config.cya_dilution_target) }}{% else %}{{ '%g'|format(config.cya_dilution_target) }}{% endif %}"
+               placeholder="z. B. 30">
+      </label>
+    </div>
+    <button type="submit" class="btn primary" style="margin-top:.6rem">Berechnen</button>
+  </form>
+
+  {% if cya_result %}
+  <div class="result-box">
+    <div class="result-title">Ergebnis</div>
+    <div class="result-amount">{{ "%g"|format(cya_result.liters_to_replace) }} Liter</div>
+    <div class="muted small">
+      entspricht {{ cya_result.fraction_pct }} % des Beckenvolumens ({{ "%g"|format(cya_result.volume_m3) }} m³) ·
+      CYA von {{ "%g"|format(cya_result.current_cya) }} auf {{ "%g"|format(cya_result.target_cya) }} mg/l senken
+    </div>
+    <div class="flash warn" style="margin-top:.6rem">
+      ⚠ Wasser ablassen und mit Frischwasser auffüllen. Danach Chemikalien neu einstellen
+      (TA → pH → Chlor). CYA anschließend nachmessen – der Zielwert ist ein Richtwert.
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+<!-- Hinweis: Dynamisches Chlor-Minimum -->
+<section class="card">
+  <h2>Chlor-Minimum bei stabilisierten Pools</h2>
+  <p class="muted small">
+    Bei Pools mit Cyanursäure (durch Chlortabs) sollte das freie Chlor mindestens 7,5 % des CYA-Werts betragen:<br>
+    <strong>FC<sub>min</sub> = CYA × 0,075</strong>
+  </p>
+  <p class="muted small">Beispiele:</p>
+  <table class="dose-table" style="max-width:320px">
+    <thead><tr><th>CYA (mg/l)</th><th>FC-Minimum (mg/l)</th></tr></thead>
+    <tbody>
+      {% for cya_val in [20, 30, 40, 50, 60, 70, 80] %}
+      <tr>
+        <td>{{ cya_val }}</td>
+        <td><strong>{{ "%.1f"|format(cya_val * 0.075) }}</strong></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small" style="margin-top:.5rem">
+    Das dynamische Chlor-Minimum kann unter <a href="{{ base }}/config">Einstellungen</a> aktiviert werden.
+    Die App passt dann die Mindest-Schwelle automatisch an den aktuell gemessenen CYA-Wert an.
+  </p>
+</section>
+
+{% endblock %}

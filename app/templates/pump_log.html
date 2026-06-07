@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block nav_pump %}active{% endblock %}
+{% block title %}Pumpenlaufzeit · {{ app_name }}{% endblock %}
+{% block content %}
+
+<!-- Statistik-Karten -->
+<section class="card">
+  <h2>Pumpenlaufzeit</h2>
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label">Diese Woche</div>
+      <div class="stat-value">{{ stats.week_hours }} <span class="unit">h</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Dieser Monat</div>
+      <div class="stat-value">{{ stats.month_hours }} <span class="unit">h</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Gesamt</div>
+      <div class="stat-value">{{ stats.total_hours }} <span class="unit">h</span></div>
+    </div>
+    <div class="stat-card {% if stats.backwash_due %}stat-warn{% endif %}">
+      <div class="stat-label">Seit letztem Rückspülen</div>
+      <div class="stat-value">{{ stats.hours_since_backwash }} <span class="unit">h</span></div>
+      {% if stats.last_backwash %}
+      <div class="muted small">{{ stats.last_backwash.strftime("%d.%m.%Y") }}</div>
+      {% else %}
+      <div class="muted small">Noch kein Rückspülen protokolliert</div>
+      {% endif %}
+    </div>
+  </div>
+  {% if stats.backwash_due %}
+  <div class="flash warn">⚠ Rückspülen empfohlen: {{ stats.hours_since_backwash }} h seit dem letzten Rückspülen
+    (Intervall: {{ config.backwash_interval_hours|int }} h).</div>
+  {% endif %}
+</section>
+
+<!-- Eintrag hinzufügen -->
+<section class="card">
+  <h2>Eintrag {{ today.strftime("%d.%m.%Y") }}
+    {% if today_log %}<small class="badge small">vorhanden – wird überschrieben</small>{% endif %}
+  </h2>
+  <form method="post" action="{{ base }}/pump-log">
+    <div class="grid2">
+      <label>Datum
+        <input type="date" name="log_date" value="{{ today.isoformat() }}">
+      </label>
+      <label>Laufzeit (Stunden)
+        <input type="text" inputmode="decimal" name="runtime_hours"
+               value="{% if today_log %}{{ '%g'|format(today_log.runtime_hours) }}{% else %}8{% endif %}"
+               placeholder="z. B. 8">
+      </label>
+    </div>
+    <label class="checkbox-inline">
+      <input type="checkbox" name="backwashed" {% if today_log and today_log.backwashed %}checked{% endif %}>
+      Heute rückgespült
+    </label>
+    <label>Notiz
+      <input type="text" name="note" placeholder="optional"
+             value="{{ today_log.note or '' if today_log else '' }}">
+    </label>
+    <button type="submit" class="btn primary" style="margin-top:.6rem">Eintrag speichern</button>
+  </form>
+</section>
+
+<!-- Verlauf -->
+<section class="card">
+  <h2>Protokoll <small class="muted">letzte 30 Einträge</small></h2>
+  {% if logs %}
+  <div class="table-scroll">
+    <table class="history">
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Laufzeit</th>
+          <th>Rückgespült</th>
+          <th>Notiz</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in logs %}
+        <tr {% if l.backwashed %}class="row-highlight"{% endif %}>
+          <td>{{ l.log_date.strftime("%d.%m.%Y") }}</td>
+          <td>{{ "%g"|format(l.runtime_hours) }} h</td>
+          <td>{% if l.backwashed %}✓{% else %}–{% endif %}</td>
+          <td class="note">{{ l.note or "" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Noch keine Einträge. Trage deinen ersten Pumpentag ein!</p>
+  {% endif %}
+</section>
+
+{% endblock %}

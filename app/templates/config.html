@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block nav_config %}active{% endblock %}
+{% block title %}Einstellungen · {{ app_name }}{% endblock %}
 {% block content %}
 
 <section class="card">
@@ -19,6 +20,8 @@
 
     <h3>Zielwerte (Min / Soll / Max)</h3>
     <table class="targets">
+      <thead><tr><th></th><th class="center">Min</th><th class="center">Soll</th><th class="center">Max</th></tr></thead>
+      <tbody>
       <tr>
         <th>pH-Wert</th>
         <td><input type="text" inputmode="decimal" name="ph_min" value="{{ '%g'|format(config.ph_min) }}"></td>
@@ -43,51 +46,123 @@
         <td><input type="text" inputmode="decimal" name="cya_target" value="{{ '%g'|format(config.cya_target) }}"></td>
         <td><input type="text" inputmode="decimal" name="cya_max" value="{{ '%g'|format(config.cya_max) }}"></td>
       </tr>
+      </tbody>
     </table>
+
+    <h3>Erweiterte Optionen</h3>
+    <label class="checkbox-inline">
+      <input type="checkbox" name="fc_min_dynamic" {% if config.fc_min_dynamic %}checked{% endif %}>
+      Dynamisches Chlor-Minimum (CYA × 7,5 % als Untergrenze)
+    </label>
+    <p class="muted small">Bei aktiviertem dynamischen Minimum wird das konfigurierte FC-Min
+      durch CYA × 0,075 ersetzt, wenn dieser Wert größer ist.
+      Empfohlen bei Dauerpflege mit Chlortabletten.</p>
+    <div class="grid2">
+      <label>CYA-Warnlevel (mg/l)
+        <input type="text" inputmode="decimal" name="cya_warning_level"
+               value="{{ '%g'|format(config.cya_warning_level) }}"
+               title="Ab diesem CYA-Wert erscheint eine Warnung mit Verdünnungsempfehlung">
+      </label>
+      <label>CYA-Ziel nach Verdünnung (mg/l)
+        <input type="text" inputmode="decimal" name="cya_dilution_target"
+               value="{{ '%g'|format(config.cya_dilution_target) }}"
+               title="Zielwert für den CYA-Verdünnungsrechner">
+      </label>
+      <label>Rückspül-Intervall (Pumpenstunden)
+        <input type="text" inputmode="decimal" name="backwash_interval_hours"
+               value="{{ '%g'|format(config.backwash_interval_hours) }}"
+               title="Nach dieser Laufzeit wird Rückspülen empfohlen">
+      </label>
+    </div>
+
     <button type="submit" class="btn primary">Konfiguration speichern</button>
   </form>
 </section>
 
+<!-- Tabletten-Dosierer Einstellungen -->
+<section class="card">
+  <h2>Tabletten-Dosierer</h2>
+  <form method="post" action="{{ base }}/config/dispenser">
+    <div class="grid2">
+      <label>Name des Dosierers
+        <input type="text" name="name" value="{{ dispenser.name }}">
+      </label>
+      <label>Tablettengewicht (g/Stück)
+        <input type="text" inputmode="decimal" name="tablet_weight_g"
+               value="{{ '%g'|format(dispenser.tablet_weight_g) }}">
+      </label>
+      <label>Geschätzter Verbrauch (Tabs/Tag)
+        <input type="text" inputmode="decimal" name="daily_consumption_tabs"
+               value="{{ '%g'|format(dispenser.daily_consumption_tabs) }}"
+               placeholder="z. B. 0,5">
+      </label>
+    </div>
+    <p class="muted small">Der Verbrauch ist abhängig von Beckenvolumen, Wassertemperatur und
+      Durchfluss durch den Dosierer. Passe den Wert anhand deiner Erfahrung an.</p>
+    <button type="submit" class="btn small">Dosierer speichern</button>
+  </form>
+</section>
+
+<!-- Chemikalien & Lagerbestand -->
 <section class="card">
   <h2>Chemikalien</h2>
   <p class="muted small">Trage die Dosierung so ein, wie sie auf der Verpackung steht
     („Menge pro Volumen ändert den Wert um …"). Daraus berechnet die App die nötige Menge für dein Becken.</p>
 
   {% for c in chemicals %}
-  <form method="post" action="{{ base }}/config/chemicals/{{ c.id }}" class="chem-row {% if not c.is_active %}inactive{% endif %}">
-    <div class="grid-chem">
-      <label>Name<input type="text" name="name" value="{{ c.name }}"></label>
-      <label>Zweck
-        <select name="purpose">
-          {% for key, info in purposes.items() %}
-          <option value="{{ key }}" {% if c.purpose == key %}selected{% endif %}>{{ info.label }}</option>
-          {% endfor %}
-        </select>
+  <div class="chem-block">
+    <form method="post" action="{{ base }}/config/chemicals/{{ c.id }}" class="chem-row {% if not c.is_active %}inactive{% endif %}">
+      <div class="grid-chem">
+        <label>Name<input type="text" name="name" value="{{ c.name }}"></label>
+        <label>Zweck
+          <select name="purpose">
+            {% for key, info in purposes.items() %}
+            <option value="{{ key }}" {% if c.purpose == key %}selected{% endif %}>{{ info.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Einheit
+          <select name="unit">
+            <option value="g" {% if c.unit == 'g' %}selected{% endif %}>g</option>
+            <option value="ml" {% if c.unit == 'ml' %}selected{% endif %}>ml</option>
+          </select>
+        </label>
+      </div>
+      <div class="dose-line">
+        <input type="text" inputmode="decimal" name="ref_dose_amount" value="{{ '%g'|format(c.ref_dose_amount) }}" title="Menge">
+        <span>{{ c.unit }} pro</span>
+        <input type="text" inputmode="decimal" name="ref_volume_m3" value="{{ '%g'|format(c.ref_volume_m3) }}" title="Volumen">
+        <span>m³ ändert Wert um</span>
+        <input type="text" inputmode="decimal" name="ref_effect_delta" value="{{ '%g'|format(c.ref_effect_delta) }}" title="Effekt">
+      </div>
+      <div class="grid-chem">
+        <label>Wirkstoff %<input type="text" inputmode="decimal" name="active_ingredient_pct" value="{% if c.active_ingredient_pct is not none %}{{ '%g'|format(c.active_ingredient_pct) }}{% endif %}"></label>
+        <label class="checkbox-inline"><input type="checkbox" name="is_active" {% if c.is_active %}checked{% endif %}> aktiv</label>
+      </div>
+      <label>Notiz<input type="text" name="notes" value="{{ c.notes or '' }}"></label>
+      <div class="chem-actions">
+        <button type="submit" class="btn small">Speichern</button>
+        <button type="submit" class="btn small danger" formaction="{{ base }}/config/chemicals/{{ c.id }}/delete">Löschen</button>
+      </div>
+    </form>
+
+    <!-- Lagerbestand -->
+    <form method="post" action="{{ base }}/config/chemicals/{{ c.id }}/stock" class="stock-form">
+      <label class="small">Lagerbestand ({{ c.unit }})
+        <input type="text" inputmode="decimal" name="stock_g"
+               value="{% if c.stock_g is not none %}{{ '%g'|format(c.stock_g) }}{% endif %}"
+               placeholder="aktueller Vorrat"
+               style="width:110px">
+        <button type="submit" class="btn small">Speichern</button>
+        {% if c.stock_g is not none %}
+        <span class="muted small">
+          · {{ '%g'|format(c.stock_g) }} {{ c.unit }} vorhanden
+          {% if c.stock_updated_at %}(Stand {{ c.stock_updated_at.strftime("%d.%m.%Y") }}){% endif %}
+        </span>
+        {% endif %}
       </label>
-      <label>Einheit
-        <select name="unit">
-          <option value="g" {% if c.unit == 'g' %}selected{% endif %}>g</option>
-          <option value="ml" {% if c.unit == 'ml' %}selected{% endif %}>ml</option>
-        </select>
-      </label>
-    </div>
-    <div class="dose-line">
-      <input type="text" inputmode="decimal" name="ref_dose_amount" value="{{ '%g'|format(c.ref_dose_amount) }}" title="Menge">
-      <span>{{ c.unit }} pro</span>
-      <input type="text" inputmode="decimal" name="ref_volume_m3" value="{{ '%g'|format(c.ref_volume_m3) }}" title="Volumen">
-      <span>m³ ändert Wert um</span>
-      <input type="text" inputmode="decimal" name="ref_effect_delta" value="{{ '%g'|format(c.ref_effect_delta) }}" title="Effekt">
-    </div>
-    <div class="grid-chem">
-      <label>Wirkstoff %<input type="text" inputmode="decimal" name="active_ingredient_pct" value="{% if c.active_ingredient_pct is not none %}{{ '%g'|format(c.active_ingredient_pct) }}{% endif %}"></label>
-      <label class="checkbox-inline"><input type="checkbox" name="is_active" {% if c.is_active %}checked{% endif %}> aktiv</label>
-    </div>
-    <label>Notiz<input type="text" name="notes" value="{{ c.notes or '' }}"></label>
-    <div class="chem-actions">
-      <button type="submit" class="btn small">Speichern</button>
-      <button type="submit" class="btn small danger" formaction="{{ base }}/config/chemicals/{{ c.id }}/delete">Löschen</button>
-    </div>
-  </form>
+    </form>
+  </div>
   {% endfor %}
 
   <details class="add-chem">

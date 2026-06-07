@@ -1,4 +1,4 @@
-"""Pool-Chemie: Bewertung der Messwerte und Dosiervorschläge.
+"""Pool-Chemie: Bewertung der Messwerte, Dosiervorschläge und Berechnungen.
 
 Die Berechnungen sind bewusst einfach gehalten und basieren auf der
 Referenz-Dosierung der jeweiligen Chemikalie (so wie sie auf der
@@ -16,7 +16,6 @@ from .models import Chemical, Measurement, PoolConfig
 # Stammdaten: Einsatzzwecke und Parameter
 # ---------------------------------------------------------------------------
 
-# purpose-Key -> (Anzeigename, Standard-Einheit, Standard-Effekt pro Referenz)
 PURPOSES: dict[str, dict] = {
     "ph_minus": {"label": "pH-Minus (pH senken)", "unit": "g", "default_effect": 0.1},
     "ph_plus": {"label": "pH-Plus (pH heben)", "unit": "g", "default_effect": 0.1},
@@ -29,7 +28,6 @@ PURPOSES: dict[str, dict] = {
     "other": {"label": "Sonstiges", "unit": "g", "default_effect": 0.0},
 }
 
-# Parameter-Key -> Anzeigeinfos
 PARAMETERS: dict[str, dict] = {
     "ph": {"label": "pH-Wert", "unit": "", "decimals": 1},
     "free_cl": {"label": "Freies Chlor", "unit": "mg/l", "decimals": 1},
@@ -67,13 +65,13 @@ class ParameterStatus:
 
 @dataclass
 class DosingSuggestion:
-    parameter: str          # betroffener Parameter (Label)
-    purpose: str            # purpose-Key
+    parameter: str
+    purpose: str
     chemical_name: str
-    amount: float           # zuzugebende Menge
-    unit: str               # g / ml
-    reason: str             # Erklärtext
-    delta: float            # angestrebte Änderung
+    amount: float
+    unit: str
+    reason: str
+    delta: float
 
 
 @dataclass
@@ -101,20 +99,14 @@ def _classify(value: float | None, lo: float, hi: float) -> str:
 def required_dose(chem: Chemical, delta: float, volume_m3: float) -> float:
     """Menge der Chemikalie, um den Parameter um ``delta`` zu ändern.
 
-    Formel::
-
-        menge = (delta / ref_effect) * (volume / ref_volume) * ref_dose
-
-    ``delta`` muss positiv sein (Betrag der gewünschten Änderung).
+    Formel: menge = (delta / ref_effect) * (volume / ref_volume) * ref_dose
     """
     if chem.ref_effect_delta <= 0 or chem.ref_volume_m3 <= 0:
         return 0.0
-    dose = (delta / chem.ref_effect_delta) * (volume_m3 / chem.ref_volume_m3) * chem.ref_dose_amount
-    return max(0.0, dose)
+    return max(0.0, (delta / chem.ref_effect_delta) * (volume_m3 / chem.ref_volume_m3) * chem.ref_dose_amount)
 
 
 def _pick(chemicals: list[Chemical], purpose: str) -> Chemical | None:
-    """Erste aktive Chemikalie für einen Zweck (mit gültiger Wirkung)."""
     for c in chemicals:
         if c.purpose == purpose and c.is_active and c.ref_effect_delta > 0:
             return c
@@ -122,12 +114,35 @@ def _pick(chemicals: list[Chemical], purpose: str) -> Chemical | None:
 
 
 def _round_dose(amount: float) -> float:
-    """Sinnvoll runden: kleine Mengen auf 1, größere auf 5/10."""
     if amount < 50:
         return round(amount)
     if amount < 500:
         return round(amount / 5) * 5
     return round(amount / 10) * 10
+
+
+def effective_fc_min(cfg: PoolConfig, cya_val: float | None) -> float:
+    """Effektives Chlor-Minimum: bei aktiviertem dynamischem Modus CYA × 7,5 %."""
+    if cfg.fc_min_dynamic and cya_val and cya_val > 0:
+        return max(cfg.free_cl_min or 1.0, cya_val * 0.075)
+    return cfg.free_cl_min or 1.0
+
+
+def cya_dilution_volume(current_cya: float, target_cya: float, pool_volume_m3: float) -> float:
+    """Liter Wasser, die getauscht werden müssen, um CYA von current auf target zu senken.
+
+    Formel: V_tausch = (current - target) / current × pool_volume_m3 × 1000
+    """
+    if current_cya <= 0 or target_cya >= current_cya:
+        return 0.0
+    fraction = (current_cya - target_cya) / current_cya
+    return round(fraction * pool_volume_m3 * 1000)
+
+
+def shock_dose(chem: Chemical, current_fc: float, target_fc: float, volume_m3: float) -> float:
+    """Menge Schockprodukt, um freies Chlor von current_fc auf target_fc zu heben."""
+    delta = max(0.0, target_fc - current_fc)
+    return _round_dose(required_dose(chem, delta, volume_m3))
 
 
 # ---------------------------------------------------------------------------
@@ -138,18 +153,18 @@ def evaluate(cfg: PoolConfig, m: Measurement, chemicals: list[Chemical]) -> Eval
     """Bewertet einen Messwert-Satz und erzeugt Dosiervorschläge."""
     ev = Evaluation()
 
-    # Umwälz-/Turnover-Zeit (informativ, später relevant für Dosierautomatik)
     if cfg.pump_flow_m3h and cfg.pump_flow_m3h > 0:
         ev.turnover_hours = round(cfg.volume_m3 / cfg.pump_flow_m3h, 1)
 
-    # --- Status je Parameter ---
+    fc_min = effective_fc_min(cfg, m.cya)
+
     ev.statuses = [
         ParameterStatus("ph", PARAMETERS["ph"]["label"], "", m.ph,
                         cfg.ph_target, cfg.ph_min, cfg.ph_max,
                         _classify(m.ph, cfg.ph_min, cfg.ph_max)),
         ParameterStatus("free_cl", PARAMETERS["free_cl"]["label"], "mg/l", m.free_cl,
-                        cfg.free_cl_target, cfg.free_cl_min, cfg.free_cl_max,
-                        _classify(m.free_cl, cfg.free_cl_min, cfg.free_cl_max)),
+                        cfg.free_cl_target, fc_min, cfg.free_cl_max,
+                        _classify(m.free_cl, fc_min, cfg.free_cl_max)),
         ParameterStatus("ta", PARAMETERS["ta"]["label"], "mg/l", m.ta,
                         cfg.ta_target, cfg.ta_min, cfg.ta_max,
                         _classify(m.ta, cfg.ta_min, cfg.ta_max)),
@@ -165,7 +180,7 @@ def evaluate(cfg: PoolConfig, m: Measurement, chemicals: list[Chemical]) -> Eval
 
     vol = cfg.volume_m3
 
-    # --- Gesamtalkalinität zuerst: sie puffert den pH ---
+    # --- Gesamtalkalinität zuerst ---
     if m.ta is not None and m.ta < cfg.ta_min:
         chem = _pick(chemicals, "alkalinity_plus")
         delta = cfg.ta_target - m.ta
@@ -215,8 +230,7 @@ def evaluate(cfg: PoolConfig, m: Measurement, chemicals: list[Chemical]) -> Eval
             ev.warnings.append("Keine Chemikalie für 'pH-Plus' konfiguriert.")
 
     # --- Freies Chlor ---
-    if m.free_cl is not None and m.free_cl < cfg.free_cl_min:
-        # Bei sehr niedrigem Chlor ggf. Stoßchlorung empfehlen
+    if m.free_cl is not None and m.free_cl < fc_min:
         purpose = "chlorine_free"
         chem = _pick(chemicals, purpose)
         if chem is None:
@@ -243,7 +257,7 @@ def evaluate(cfg: PoolConfig, m: Measurement, chemicals: list[Chemical]) -> Eval
             "Becken meiden bis der Wert fällt (Sonne/Umwälzung bauen Chlor ab)."
         )
 
-    # --- Gebundenes Chlor (Chloramine) prüfen ---
+    # --- Gebundenes Chlor (Chloramine) ---
     if m.free_cl is not None and m.total_cl is not None:
         combined = m.total_cl - m.free_cl
         if combined > 0.5:
@@ -265,13 +279,24 @@ def evaluate(cfg: PoolConfig, m: Measurement, chemicals: list[Chemical]) -> Eval
                     reason=f"Stabilisator (Cyanursäure) von {m.cya:g} auf ~{cfg.cya_target:g} "
                            "mg/l anheben. Schützt das Chlor vor UV-Abbau.",
                 ))
-    elif m.cya is not None and m.cya > 80:
+    elif m.cya is not None and m.cya > (cfg.cya_warning_level or 70.0):
+        liters = cya_dilution_volume(m.cya, cfg.cya_dilution_target, cfg.volume_m3)
         ev.warnings.append(
-            f"Cyanursäure ist mit {m.cya:g} mg/l sehr hoch. Das schwächt die "
-            "Chlorwirkung. Abhilfe meist nur durch teilweisen Wasserwechsel."
+            f"Cyanursäure ist mit {m.cya:g} mg/l sehr hoch (> {cfg.cya_warning_level:g} mg/l). "
+            f"Das schwächt die Chlorwirkung erheblich. "
+            f"Empfehlung: ca. {liters:,.0f} Liter Wasser tauschen, um CYA auf "
+            f"~{cfg.cya_dilution_target:g} mg/l zu senken."
         )
 
-    # --- Allgemeine Hinweise ---
+    # --- Dynamisches Chlor-Minimum Hinweis ---
+    if cfg.fc_min_dynamic and m.cya and m.cya > 0:
+        dyn_min = m.cya * 0.075
+        if dyn_min > cfg.free_cl_min:
+            ev.warnings.append(
+                f"Dynamisches Chlor-Minimum aktiv: Bei CYA = {m.cya:g} mg/l sollte "
+                f"das freie Chlor mind. {dyn_min:.1f} mg/l betragen (7,5 % von CYA)."
+            )
+
     if ev.suggestions:
         ev.warnings.append(
             "Reihenfolge: erst TA, dann pH, dann Chlor. Mengen sind Schätzwerte – "

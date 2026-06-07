@@ -23,25 +23,27 @@ body {
   line-height: 1.5;
 }
 
+/* ---- Topbar ---- */
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   flex-wrap: wrap; gap: .5rem;
-  padding: .8rem 1rem;
+  padding: .7rem 1rem;
   background: var(--card);
   border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 10;
 }
-.brand { font-weight: 700; font-size: 1.15rem; color: var(--text); text-decoration: none; }
-.topbar nav { display: flex; gap: .25rem; }
+.brand { font-weight: 700; font-size: 1.1rem; color: var(--text); text-decoration: none; white-space: nowrap; }
+.topbar nav { display: flex; gap: .15rem; flex-wrap: wrap; }
 .topbar nav a {
   color: var(--muted); text-decoration: none;
-  padding: .4rem .8rem; border-radius: 8px; font-size: .95rem;
+  padding: .35rem .65rem; border-radius: 8px; font-size: .88rem;
 }
 .topbar nav a:hover { background: var(--card-2); color: var(--text); }
 .topbar nav a.active { background: var(--primary); color: #fff; }
 
-.container { max-width: 860px; margin: 0 auto; padding: 1rem; }
+.container { max-width: 900px; margin: 0 auto; padding: 1rem; }
 
+/* ---- Cards ---- */
 .card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -54,9 +56,10 @@ body {
 
 .muted { color: var(--muted); }
 .small { font-size: .85rem; }
+.center { text-align: center; }
 small.muted { font-weight: 400; font-size: .8rem; }
 
-/* Status-Karten */
+/* ---- Status-Karten ---- */
 .status-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .7rem;
 }
@@ -76,16 +79,16 @@ small.muted { font-weight: 400; font-size: .8rem; }
 .status-low .status-meta { color: var(--low); }
 .status-high .status-meta { color: var(--high); }
 
-/* Dosier-Tabelle */
+/* ---- Dosier-Tabelle ---- */
 .dose-table { width: 100%; border-collapse: collapse; }
 .dose-table th, .dose-table td { text-align: left; padding: .6rem .4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 .dose-table .right, .right { text-align: right; }
 .amount { font-weight: 700; font-size: 1.05rem; white-space: nowrap; color: var(--primary); }
 .ok-msg { color: var(--ok); font-weight: 600; }
 
-/* Formulare */
+/* ---- Formulare ---- */
 label { display: block; margin: .55rem 0; font-size: .9rem; color: var(--muted); }
-input[type=text], select {
+input[type=text], input[type=date], select {
   width: 100%; margin-top: .25rem; padding: .55rem .6rem;
   background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
   color: var(--text); font-size: 1rem;
@@ -97,6 +100,7 @@ input:focus, select:focus { outline: 2px solid var(--primary); border-color: var
   display: inline-block; cursor: pointer;
   padding: .6rem 1rem; border: 1px solid var(--line); border-radius: 8px;
   background: var(--card-2); color: var(--text); font-size: .95rem;
+  text-decoration: none;
 }
 .btn:hover { background: var(--line); }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
@@ -106,14 +110,15 @@ input:focus, select:focus { outline: 2px solid var(--primary); border-color: var
 .btn.danger:hover { background: #3a1f1f; }
 .measure-form button { margin-top: .8rem; }
 
-/* Zielwerte-Tabelle */
+/* ---- Zielwerte-Tabelle ---- */
 .targets { width: 100%; border-collapse: collapse; }
 .targets th { text-align: left; padding: .3rem .5rem .3rem 0; font-weight: 500; white-space: nowrap; }
 .targets td { padding: .2rem; }
 .targets input { width: 80px; }
 
-/* Chemikalien */
-.chem-row { border: 1px solid var(--line); border-radius: 10px; padding: .8rem; margin-bottom: .8rem; background: var(--card-2); }
+/* ---- Chemikalien ---- */
+.chem-block { margin-bottom: 1rem; }
+.chem-row { border: 1px solid var(--line); border-radius: 10px; padding: .8rem; background: var(--card-2); }
 .chem-row.inactive { opacity: .55; }
 .grid-chem { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 0 .7rem; }
 .dose-line { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; margin: .5rem 0; font-size: .9rem; color: var(--muted); }
@@ -122,29 +127,119 @@ input:focus, select:focus { outline: 2px solid var(--primary); border-color: var
 .checkbox-inline input { width: auto; }
 .chem-actions { display: flex; gap: .5rem; margin-top: .5rem; }
 .add-chem summary { cursor: pointer; color: var(--primary); padding: .5rem 0; }
+.stock-form { padding: .5rem .8rem; background: #141f34; border: 1px dashed var(--line); border-top: none; border-radius: 0 0 10px 10px; }
+.stock-form label { margin: 0; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.stock-form input { width: auto; margin-top: 0; }
 
-/* Verlauf */
+/* ---- Verlauf ---- */
 .table-scroll { overflow-x: auto; }
 .history { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .history th, .history td { padding: .5rem .5rem; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
 .history th { color: var(--muted); font-weight: 500; }
 .history .note { text-align: left; white-space: normal; color: var(--muted); }
+.row-highlight td { background: rgba(43, 182, 115, 0.08); }
 
-/* Flash / Hinweise */
+/* ---- Flash / Hinweise ---- */
 .flash { padding: .7rem .9rem; border-radius: 8px; margin: .6rem 0; font-size: .92rem; }
 .flash.success { background: #14352a; color: #8ff0c0; border: 1px solid #1f5e44; }
 .flash.warn { background: #3a3115; color: #f2d98a; border: 1px solid #6b5a1f; }
+.flash a { color: #f2d98a; }
 
 .badge { background: var(--primary); color: #fff; padding: .15rem .5rem; border-radius: 6px; font-size: .75rem; }
 .badge.small { background: var(--line); color: var(--muted); }
 
 .footer {
-  max-width: 860px; margin: 0 auto; padding: 1rem;
+  max-width: 900px; margin: 0 auto; padding: 1rem;
   display: flex; justify-content: space-between; align-items: center; gap: 1rem;
   color: var(--muted); font-size: .8rem;
 }
 
+/* ---- Tabletten-Dosierer ---- */
+.dispenser-row { display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: flex-start; }
+.dispenser-info { min-width: 160px; }
+.dispenser-forms { display: flex; gap: .8rem; flex-wrap: wrap; }
+.disp-form { display: flex; align-items: flex-end; gap: .4rem; }
+.disp-form label { margin: 0; }
+.disp-count {
+  font-size: 2.5rem; font-weight: 700; line-height: 1;
+  margin-bottom: .25rem;
+}
+.disp-ok { color: var(--ok); }
+.disp-warn { color: var(--low); }
+.disp-low { color: var(--high); }
+.text-danger { color: var(--high); font-weight: 600; }
+.text-warn { color: var(--low); }
+
+/* ---- Pumpenlaufzeit / Stats ---- */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .7rem; margin-bottom: .8rem; }
+.stat-card {
+  background: var(--card-2); border-radius: 10px; padding: .8rem;
+  border-left: 4px solid var(--line);
+}
+.stat-warn { border-left-color: var(--low); }
+.stat-label { font-size: .8rem; color: var(--muted); }
+.stat-value { font-size: 1.6rem; font-weight: 700; }
+.stat-value .unit { font-size: .8rem; font-weight: 400; color: var(--muted); }
+
+/* ---- Checklisten ---- */
+.cl-type-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .8rem; }
+.cl-type-btn {
+  width: 100%; text-align: left; cursor: pointer;
+  background: var(--card-2); border: 1px solid var(--line);
+  border-radius: 10px; padding: .9rem 1rem;
+  color: var(--text); transition: border-color .15s;
+}
+.cl-type-btn:hover { border-color: var(--primary); }
+.cl-icon { font-size: 1.8rem; margin-bottom: .3rem; }
+.cl-label { font-weight: 600; font-size: 1rem; }
+.cl-desc { margin-top: .2rem; }
+.cl-count { margin-top: .2rem; }
+
+.cl-run-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: .4rem; margin-bottom: .6rem; }
+.cl-run-header h2 { margin: 0; }
+
+.cl-progress { height: 6px; background: var(--line); border-radius: 3px; margin-bottom: .8rem; overflow: hidden; }
+.cl-bar { height: 100%; background: var(--ok); border-radius: 3px; transition: width .3s; }
+
+.cl-tasks { list-style: none; margin: 0; padding: 0; }
+.cl-task {
+  display: flex; align-items: flex-start; gap: .7rem;
+  padding: .55rem 0; border-bottom: 1px solid var(--line);
+}
+.cl-task:last-child { border-bottom: none; }
+.cl-done .cl-task-text { opacity: .55; text-decoration: line-through; }
+.cl-check-form { flex-shrink: 0; margin: 0; }
+.cl-checkbox {
+  width: 26px; height: 26px; border-radius: 6px;
+  border: 2px solid var(--line); background: var(--bg);
+  color: var(--ok); font-size: 1rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+}
+.cl-done .cl-checkbox { background: var(--ok); border-color: var(--ok); color: #fff; }
+.cl-task-text strong { display: block; }
+.cl-actions { display: flex; gap: .5rem; margin-top: .8rem; }
+
+/* ---- Rechner (Tools) ---- */
+.result-box {
+  background: var(--card-2); border: 1px solid var(--primary);
+  border-radius: 10px; padding: 1rem; margin-top: 1rem;
+}
+.result-title { font-size: .85rem; color: var(--muted); margin-bottom: .2rem; }
+.result-amount { font-size: 2rem; font-weight: 700; color: var(--primary); }
+
+/* ---- Trends / Charts ---- */
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1rem; }
+.chart-box { background: var(--card-2); border-radius: 10px; padding: .8rem 1rem; }
+.chart-box h3 { margin: 0 0 .6rem; font-size: .95rem; color: var(--muted); }
+.chart-box canvas { height: 180px !important; }
+
+/* ---- Responsive ---- */
 @media (max-width: 560px) {
   .grid2, .grid-chem { grid-template-columns: 1fr; }
   .status-value { font-size: 1.3rem; }
+  .dispenser-row { flex-direction: column; }
+  .chart-grid { grid-template-columns: 1fr; }
+  .cl-type-grid { grid-template-columns: 1fr; }
+  .topbar nav a { padding: .3rem .45rem; font-size: .82rem; }
 }

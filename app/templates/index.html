@@ -108,4 +108,46 @@
   <p class="muted small">Tipp: Felder sind mit deiner letzten Messung vorbelegt – einfach die geänderten Werte anpassen.</p>
 </section>
 
+<!-- Tabletten-Dosierer Widget -->
+<section class="card">
+  <h2>Chlortabletten-Dosierer</h2>
+  <div class="dispenser-row">
+    <div class="dispenser-info">
+      <div class="disp-count {% if dispenser.current_count <= 1 %}disp-low{% elif dispenser.current_count <= 3 %}disp-warn{% else %}disp-ok{% endif %}">
+        {{ dispenser.current_count }}
+      </div>
+      <div class="muted small">{{ dispenser.name }} · {{ "%g"|format(dispenser.tablet_weight_g) }} g/Tab</div>
+      {% if days_left is not none %}
+      <div class="small {% if days_left <= 3 %}text-danger{% elif days_left <= 7 %}text-warn{% endif %}">
+        ≈ {{ days_left }} Tage verbleibend
+      </div>
+      {% endif %}
+      {% if dispenser.last_refill_at %}
+      <div class="muted small">Letztes Nachfüllen: {{ dispenser.last_refill_at.strftime("%d.%m.%Y") }}</div>
+      {% endif %}
+      {% if dispenser.current_count <= 1 %}
+      <div class="flash warn" style="margin-top:.4rem">⚠ Tabletten fast leer – bitte nachfüllen!</div>
+      {% endif %}
+    </div>
+    <div class="dispenser-forms">
+      <form method="post" action="{{ base }}/dispenser/update" class="disp-form">
+        <input type="hidden" name="is_refill" value="0">
+        <label class="small">Aktueller Bestand
+          <input type="text" inputmode="numeric" name="current_count"
+                 value="{{ dispenser.current_count }}" style="width:80px">
+        </label>
+        <button type="submit" class="btn small">Aktualisieren</button>
+      </form>
+      <form method="post" action="{{ base }}/dispenser/update" class="disp-form">
+        <input type="hidden" name="is_refill" value="1">
+        <label class="small">Nachgefüllt (Stück)
+          <input type="text" inputmode="numeric" name="current_count"
+                 value="{{ dispenser.current_count }}" style="width:80px">
+        </label>
+        <button type="submit" class="btn small primary">Nachgefüllt</button>
+      </form>
+    </div>
+  </div>
+</section>
+
 {% endblock %}

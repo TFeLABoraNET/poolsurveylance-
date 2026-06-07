@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
@@ -13,9 +13,10 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from . import crud
-from .chemistry import PARAMETERS, PURPOSES, evaluate
+from .checklists import CHECKLISTS
+from .chemistry import PARAMETERS, PURPOSES, cya_dilution_volume, evaluate, shock_dose, _pick
 from .config import settings
-from .database import Base, engine, get_db
+from .database import Base, engine, get_db, migrate_schema
 from .models import Measurement
 from .mqtt import pool_mqtt
 
@@ -26,7 +27,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    # Erst-Befüllung
+    migrate_schema(engine)
     from .database import SessionLocal
     db = SessionLocal()
     try:
@@ -47,7 +48,6 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 # --------------------------------------------------------------------------
 
 def _parse_float(value: str | None) -> float | None:
-    """Wandelt Formularwert in float (akzeptiert Komma) oder None bei leer."""
     if value is None:
         return None
     value = value.strip().replace(",", ".")
@@ -59,18 +59,20 @@ def _parse_float(value: str | None) -> float | None:
         return None
 
 
-def _ingress_base(request: Request) -> str:
-    """Pfad-Prefix, unter dem die App läuft (Home-Assistant-Ingress).
+def _parse_int(value: str | None, default: int = 0) -> int:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
 
-    Bei direktem Zugriff (eigener Port) ist der Header nicht gesetzt und es
-    wird ein leerer Prefix verwendet, sodass die URLs wie gewohnt mit "/"
-    beginnen.
-    """
+
+def _ingress_base(request: Request) -> str:
     return request.headers.get("X-Ingress-Path", "").rstrip("/")
 
 
 def _redirect(request: Request, path: str) -> RedirectResponse:
-    """Redirect, der den Ingress-Prefix berücksichtigt."""
     return RedirectResponse(_ingress_base(request) + path, status_code=303)
 
 
@@ -86,7 +88,7 @@ def _base_context(request: Request) -> dict:
 
 
 # --------------------------------------------------------------------------
-# Anwendungsseite: Messwerte erfassen & Dosiervorschlag
+# Messung
 # --------------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
@@ -95,8 +97,13 @@ def index(request: Request, db: Session = Depends(get_db)):
     latest = crud.latest_measurement(db)
     chemicals = crud.list_chemicals(db, only_active=True)
     evaluation = evaluate(cfg, latest, chemicals) if latest else None
+    dispenser = crud.get_dispenser(db)
+    days_left = None
+    if dispenser.daily_consumption_tabs > 0:
+        days_left = round(dispenser.current_count / dispenser.daily_consumption_tabs, 1)
     ctx = _base_context(request)
-    ctx.update(config=cfg, latest=latest, evaluation=evaluation, saved=False)
+    ctx.update(config=cfg, latest=latest, evaluation=evaluation, saved=False,
+               dispenser=dispenser, days_left=days_left)
     return templates.TemplateResponse("index.html", ctx)
 
 
@@ -126,9 +133,24 @@ async def add_measurement(request: Request, db: Session = Depends(get_db)):
     cfg = crud.get_config(db)
     chemicals = crud.list_chemicals(db, only_active=True)
     evaluation = evaluate(cfg, measurement, chemicals)
+    dispenser = crud.get_dispenser(db)
+    days_left = None
+    if dispenser.daily_consumption_tabs > 0:
+        days_left = round(dispenser.current_count / dispenser.daily_consumption_tabs, 1)
     ctx = _base_context(request)
-    ctx.update(config=cfg, latest=measurement, evaluation=evaluation, saved=True)
+    ctx.update(config=cfg, latest=measurement, evaluation=evaluation, saved=True,
+               dispenser=dispenser, days_left=days_left)
     return templates.TemplateResponse("index.html", ctx)
+
+
+@app.post("/dispenser/update")
+async def update_dispenser_count(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    disp = crud.get_dispenser(db)
+    count = _parse_int(form.get("current_count"), disp.current_count)
+    is_refill = form.get("is_refill") == "1"
+    crud.set_dispenser_count(db, disp, count, is_refill)
+    return _redirect(request, "/")
 
 
 # --------------------------------------------------------------------------
@@ -152,15 +174,203 @@ def delete_measurement(measurement_id: int, request: Request, db: Session = Depe
 
 
 # --------------------------------------------------------------------------
-# Konfigurationsseite
+# Trendkurven
+# --------------------------------------------------------------------------
+
+@app.get("/trends", response_class=HTMLResponse)
+def trends_page(request: Request, db: Session = Depends(get_db)):
+    ctx = _base_context(request)
+    return templates.TemplateResponse("trends.html", ctx)
+
+
+@app.get("/api/trend-data")
+def trend_data(db: Session = Depends(get_db)):
+    measurements = crud.list_measurements_asc(db, limit=90)
+    labels = [m.measured_at.strftime("%d.%m.%y") for m in measurements]
+    return {
+        "labels": labels,
+        "ph": [m.ph for m in measurements],
+        "free_cl": [m.free_cl for m in measurements],
+        "ta": [m.ta for m in measurements],
+        "cya": [m.cya for m in measurements],
+        "temperature": [m.temperature for m in measurements],
+    }
+
+
+# --------------------------------------------------------------------------
+# Pumpenlaufzeit
+# --------------------------------------------------------------------------
+
+@app.get("/pump-log", response_class=HTMLResponse)
+def pump_log_page(request: Request, db: Session = Depends(get_db)):
+    cfg = crud.get_config(db)
+    logs = crud.list_pump_logs(db, limit=30)
+    stats = crud.get_pump_stats(db, cfg.backwash_interval_hours)
+    today = date.today()
+    today_log = next((l for l in logs if l.log_date == today), None)
+    ctx = _base_context(request)
+    ctx.update(logs=logs, stats=stats, today=today, today_log=today_log, config=cfg)
+    return templates.TemplateResponse("pump_log.html", ctx)
+
+
+@app.post("/pump-log")
+async def add_pump_log(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    log_date_str = form.get("log_date") or str(date.today())
+    try:
+        log_date = date.fromisoformat(log_date_str)
+    except ValueError:
+        log_date = date.today()
+    hours = _parse_float(form.get("runtime_hours")) or 0.0
+    backwashed = form.get("backwashed") == "on"
+    note = (form.get("note") or "").strip() or None
+    crud.log_pump(db, log_date, hours, backwashed, note)
+    return _redirect(request, "/pump-log")
+
+
+# --------------------------------------------------------------------------
+# Checklisten
+# --------------------------------------------------------------------------
+
+@app.get("/checklists", response_class=HTMLResponse)
+def checklists_page(request: Request, db: Session = Depends(get_db)):
+    active = crud.list_active_checklists(db)
+    history_runs = crud.list_checklist_history(db, limit=5)
+    checked_by_run: dict[int, set[str]] = {}
+    for run in active:
+        checked_by_run[run.id] = crud.get_checked_tasks(db, run.id)
+    ctx = _base_context(request)
+    ctx.update(
+        checklists=CHECKLISTS,
+        active_runs=active,
+        history_runs=history_runs,
+        checked_by_run=checked_by_run,
+    )
+    return templates.TemplateResponse("checklists.html", ctx)
+
+
+@app.post("/checklists/start")
+async def start_checklist(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    cl_type = form.get("checklist_type") or "weekly"
+    if cl_type in CHECKLISTS:
+        crud.start_checklist(db, cl_type)
+    return _redirect(request, "/checklists")
+
+
+@app.post("/checklists/{run_id}/check/{task_key}")
+def toggle_task(run_id: int, task_key: str, request: Request, db: Session = Depends(get_db)):
+    run = crud.get_checklist_run(db, run_id)
+    if run and run.completed_at is None:
+        crud.toggle_task(db, run_id, task_key)
+    return _redirect(request, "/checklists")
+
+
+@app.post("/checklists/{run_id}/close")
+def close_checklist(run_id: int, request: Request, db: Session = Depends(get_db)):
+    run = crud.get_checklist_run(db, run_id)
+    if run:
+        crud.close_checklist(db, run)
+    return _redirect(request, "/checklists")
+
+
+@app.post("/checklists/{run_id}/delete")
+def delete_checklist(run_id: int, request: Request, db: Session = Depends(get_db)):
+    run = crud.get_checklist_run(db, run_id)
+    if run:
+        crud.delete_checklist(db, run)
+    return _redirect(request, "/checklists")
+
+
+# --------------------------------------------------------------------------
+# Werkzeuge (Stoßchlorung, CYA-Rechner)
+# --------------------------------------------------------------------------
+
+@app.get("/tools", response_class=HTMLResponse)
+def tools_page(request: Request, db: Session = Depends(get_db)):
+    cfg = crud.get_config(db)
+    latest = crud.latest_measurement(db)
+    chemicals = crud.list_chemicals(db, only_active=True)
+    shock_chems = [c for c in chemicals if c.purpose in ("chlorine_shock", "chlorine_free")]
+    ctx = _base_context(request)
+    ctx.update(config=cfg, latest=latest, shock_chems=shock_chems,
+               shock_result=None, cya_result=None)
+    return templates.TemplateResponse("tools.html", ctx)
+
+
+@app.post("/tools/shock", response_class=HTMLResponse)
+async def calc_shock(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    cfg = crud.get_config(db)
+    latest = crud.latest_measurement(db)
+    chemicals = crud.list_chemicals(db, only_active=True)
+    shock_chems = [c for c in chemicals if c.purpose in ("chlorine_shock", "chlorine_free")]
+
+    chem_id = _parse_int(form.get("chem_id"), 0)
+    current_fc = _parse_float(form.get("current_fc")) or 0.0
+    target_fc = _parse_float(form.get("target_fc")) or 10.0
+    vol = _parse_float(form.get("volume_m3")) or cfg.volume_m3
+
+    selected_chem = next((c for c in shock_chems if c.id == chem_id), None) or (shock_chems[0] if shock_chems else None)
+
+    shock_result = None
+    if selected_chem:
+        amount = shock_dose(selected_chem, current_fc, target_fc, vol)
+        shock_result = {
+            "chem": selected_chem,
+            "amount": amount,
+            "current_fc": current_fc,
+            "target_fc": target_fc,
+            "volume_m3": vol,
+        }
+
+    ctx = _base_context(request)
+    ctx.update(config=cfg, latest=latest, shock_chems=shock_chems,
+               shock_result=shock_result, cya_result=None,
+               shock_form=dict(form))
+    return templates.TemplateResponse("tools.html", ctx)
+
+
+@app.post("/tools/cya", response_class=HTMLResponse)
+async def calc_cya(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    cfg = crud.get_config(db)
+    latest = crud.latest_measurement(db)
+    chemicals = crud.list_chemicals(db, only_active=True)
+    shock_chems = [c for c in chemicals if c.purpose in ("chlorine_shock", "chlorine_free")]
+
+    current_cya = _parse_float(form.get("current_cya")) or 0.0
+    target_cya = _parse_float(form.get("target_cya")) or cfg.cya_dilution_target
+    vol = _parse_float(form.get("volume_m3")) or cfg.volume_m3
+
+    liters = cya_dilution_volume(current_cya, target_cya, vol)
+
+    cya_result = {
+        "current_cya": current_cya,
+        "target_cya": target_cya,
+        "volume_m3": vol,
+        "liters_to_replace": liters,
+        "fraction_pct": round((current_cya - target_cya) / current_cya * 100, 1) if current_cya > target_cya else 0,
+    }
+
+    ctx = _base_context(request)
+    ctx.update(config=cfg, latest=latest, shock_chems=shock_chems,
+               shock_result=None, cya_result=cya_result,
+               cya_form=dict(form))
+    return templates.TemplateResponse("tools.html", ctx)
+
+
+# --------------------------------------------------------------------------
+# Konfiguration
 # --------------------------------------------------------------------------
 
 @app.get("/config", response_class=HTMLResponse)
 def config_page(request: Request, db: Session = Depends(get_db)):
     cfg = crud.get_config(db)
     chemicals = crud.list_chemicals(db)
+    dispenser = crud.get_dispenser(db)
     ctx = _base_context(request)
-    ctx.update(config=cfg, chemicals=chemicals)
+    ctx.update(config=cfg, chemicals=chemicals, dispenser=dispenser, saved=False)
     return templates.TemplateResponse("config.html", ctx)
 
 
@@ -168,20 +378,22 @@ def config_page(request: Request, db: Session = Depends(get_db)):
 async def update_config(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     cfg = crud.get_config(db)
-    fields = [
+    float_fields = [
         "volume_m3", "pump_flow_m3h",
         "ph_min", "ph_target", "ph_max",
         "free_cl_min", "free_cl_target", "free_cl_max",
         "ta_min", "ta_target", "ta_max",
         "cya_min", "cya_target", "cya_max",
+        "cya_warning_level", "cya_dilution_target", "backwash_interval_hours",
     ]
-    for field in fields:
+    for field in float_fields:
         val = _parse_float(form.get(field))
         if val is not None:
             setattr(cfg, field, val)
     name = (form.get("name") or "").strip()
     if name:
         cfg.name = name
+    cfg.fc_min_dynamic = 1 if form.get("fc_min_dynamic") else 0
     db.commit()
     return _redirect(request, "/config")
 
@@ -234,8 +446,38 @@ def remove_chemical(chem_id: int, request: Request, db: Session = Depends(get_db
     return _redirect(request, "/config")
 
 
+@app.post("/config/chemicals/{chem_id}/stock")
+async def update_stock(chem_id: int, request: Request, db: Session = Depends(get_db)):
+    chem = crud.get_chemical(db, chem_id)
+    if chem is None:
+        return _redirect(request, "/config")
+    form = await request.form()
+    stock = _parse_float(form.get("stock_g"))
+    crud.update_chemical_stock(db, chem, stock)
+    return _redirect(request, "/config")
+
+
+@app.post("/config/dispenser")
+async def update_dispenser(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    disp = crud.get_dispenser(db)
+    data = {}
+    name = (form.get("name") or "").strip()
+    if name:
+        data["name"] = name
+    tw = _parse_float(form.get("tablet_weight_g"))
+    if tw is not None:
+        data["tablet_weight_g"] = tw
+    dc = _parse_float(form.get("daily_consumption_tabs"))
+    if dc is not None:
+        data["daily_consumption_tabs"] = dc
+    if data:
+        crud.update_dispenser(db, disp, data)
+    return _redirect(request, "/config")
+
+
 # --------------------------------------------------------------------------
-# API / Health (für Home Assistant REST-Sensor & Monitoring)
+# API / Health
 # --------------------------------------------------------------------------
 
 @app.get("/api/latest")

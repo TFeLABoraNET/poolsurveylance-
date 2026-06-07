@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block nav_lists %}active{% endblock %}
+{% block title %}Checklisten · {{ app_name }}{% endblock %}
+{% block content %}
+
+<!-- Neue Checkliste starten -->
+<section class="card">
+  <h2>Checkliste starten</h2>
+  <div class="cl-type-grid">
+    {% for key, cl in checklists.items() %}
+    <form method="post" action="{{ base }}/checklists/start">
+      <input type="hidden" name="checklist_type" value="{{ key }}">
+      <button type="submit" class="cl-type-btn">
+        <div class="cl-icon">{{ cl.icon }}</div>
+        <div class="cl-label">{{ cl.label }}</div>
+        <div class="cl-desc muted small">{{ cl.description }}</div>
+        <div class="cl-count muted small">{{ cl.tasks|length }} Aufgaben</div>
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- Aktive Checklisten -->
+{% if active_runs %}
+{% for run in active_runs %}
+{% set cl = checklists.get(run.checklist_type, {}) %}
+{% set checked = checked_by_run.get(run.id, set()) %}
+{% set total = cl.tasks|length if cl.tasks is defined else 0 %}
+{% set done = checked|length %}
+<section class="card">
+  <div class="cl-run-header">
+    <h2>{{ cl.get("icon", "📋") }} {{ cl.get("label", run.checklist_type) }}
+      <span class="badge">{{ done }}/{{ total }}</span>
+    </h2>
+    <small class="muted">Gestartet {{ run.started_at.strftime("%d.%m.%Y %H:%M") }}</small>
+  </div>
+  {% if total > 0 %}
+  <div class="cl-progress">
+    <div class="cl-bar" style="width: {{ (done / total * 100)|int }}%"></div>
+  </div>
+  {% endif %}
+  <ul class="cl-tasks">
+    {% for task in cl.get("tasks", []) %}
+    {% set is_checked = task.key in checked %}
+    <li class="cl-task {% if is_checked %}cl-done{% endif %}">
+      <form method="post" action="{{ base }}/checklists/{{ run.id }}/check/{{ task.key }}" class="cl-check-form">
+        <button type="submit" class="cl-checkbox" title="Abhaken">
+          {% if is_checked %}✓{% else %}&nbsp;{% endif %}
+        </button>
+      </form>
+      <div class="cl-task-text">
+        <strong>{{ task.title }}</strong>
+        <div class="muted small">{{ task.desc }}</div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  <div class="cl-actions">
+    <form method="post" action="{{ base }}/checklists/{{ run.id }}/close" style="display:inline">
+      <button type="submit" class="btn primary small">Abschließen</button>
+    </form>
+    <form method="post" action="{{ base }}/checklists/{{ run.id }}/delete" style="display:inline">
+      <button type="submit" class="btn small danger">Löschen</button>
+    </form>
+  </div>
+</section>
+{% endfor %}
+{% else %}
+<section class="card">
+  <p class="muted">Keine aktiven Checklisten. Starte eine Checkliste oben.</p>
+</section>
+{% endif %}
+
+<!-- Abgeschlossene Checklisten -->
+{% if history_runs %}
+<section class="card">
+  <h2>Letzte abgeschlossene Checklisten</h2>
+  <table class="history">
+    <thead>
+      <tr><th>Typ</th><th>Gestartet</th><th>Abgeschlossen</th></tr>
+    </thead>
+    <tbody>
+      {% for run in history_runs %}
+      {% set cl = checklists.get(run.checklist_type, {}) %}
+      <tr>
+        <td>{{ cl.get("icon", "") }} {{ cl.get("label", run.checklist_type) }}</td>
+        <td>{{ run.started_at.strftime("%d.%m.%Y") }}</td>
+        <td>{{ run.completed_at.strftime("%d.%m.%Y") if run.completed_at else "–" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% endblock %}

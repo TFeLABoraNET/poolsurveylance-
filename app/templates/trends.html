@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block nav_trends %}active{% endblock %}
+{% block title %}Trends · {{ app_name }}{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>Trendkurven <small class="muted">letzte 90 Messungen</small></h2>
+  <p class="muted small">Grüne Linie = Sollwert, grauer Bereich = Soll-Korridor (sofern bekannt).</p>
+  <div class="chart-grid">
+    <div class="chart-box">
+      <h3>pH-Wert</h3>
+      <canvas id="chartPH"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Freies Chlor (mg/l)</h3>
+      <canvas id="chartCL"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Alkalinität TA (mg/l)</h3>
+      <canvas id="chartTA"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Cyanursäure (mg/l)</h3>
+      <canvas id="chartCYA"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Wassertemperatur (°C)</h3>
+      <canvas id="chartTEMP"></canvas>
+    </div>
+  </div>
+  <p id="no-data" class="muted small" style="display:none">Noch keine Messdaten vorhanden. Trage deine erste Messung ein!</p>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+(async () => {
+  const res = await fetch("{{ base }}/api/trend-data");
+  const d = await res.json();
+  if (!d.labels || d.labels.length === 0) {
+    document.getElementById("no-data").style.display = "";
+    document.querySelector(".chart-grid").style.display = "none";
+    return;
+  }
+
+  const COLORS = {
+    ph:    { line: "#1f9be0", fill: "rgba(31,155,224,0.12)" },
+    cl:    { line: "#2bb673", fill: "rgba(43,182,115,0.12)" },
+    ta:    { line: "#e0a52b", fill: "rgba(224,165,43,0.12)" },
+    cya:   { line: "#c77dff", fill: "rgba(199,125,255,0.12)" },
+    temp:  { line: "#ff7875", fill: "rgba(255,120,117,0.12)" },
+  };
+
+  const defaults = {
+    tension: 0.35,
+    pointRadius: 3,
+    pointHoverRadius: 5,
+    fill: true,
+    spanGaps: true,
+  };
+
+  const chartOpts = (unit) => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: "#93a3c4", maxTicksLimit: 8 }, grid: { color: "#2a3a5c" } },
+      y: { ticks: { color: "#93a3c4" }, grid: { color: "#2a3a5c" } },
+    },
+  });
+
+  const mk = (id, label, data, col) => {
+    const ctx = document.getElementById(id);
+    if (!ctx) return;
+    new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: d.labels,
+        datasets: [{
+          label,
+          data,
+          borderColor: col.line,
+          backgroundColor: col.fill,
+          ...defaults,
+        }],
+      },
+      options: chartOpts(),
+    });
+  };
+
+  mk("chartPH",   "pH",          d.ph,          COLORS.ph);
+  mk("chartCL",   "Freies Chlor",d.free_cl,     COLORS.cl);
+  mk("chartTA",   "TA",          d.ta,          COLORS.ta);
+  mk("chartCYA",  "CYA",         d.cya,         COLORS.cya);
+  mk("chartTEMP", "Temperatur",  d.temperature, COLORS.temp);
+})();
+</script>
+{% endblock %}

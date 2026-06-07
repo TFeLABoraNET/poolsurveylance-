@@ -11,6 +11,8 @@ def _config(volume=10.0):
         free_cl_min=1.0, free_cl_target=1.5, free_cl_max=3.0,
         ta_min=80.0, ta_target=100.0, ta_max=120.0,
         cya_min=30.0, cya_target=40.0, cya_max=50.0,
+        fc_min_dynamic=0, cya_warning_level=70.0,
+        cya_dilution_target=30.0, backwash_interval_hours=50.0,
     )
 
 
