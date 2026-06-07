@@ -4,7 +4,7 @@
 
 <section class="card">
   <h2>Pool-Konfiguration</h2>
-  <form method="post" action="/config">
+  <form method="post" action="{{ base }}/config">
     <label>Bezeichnung
       <input type="text" name="name" value="{{ config.name }}">
     </label>
@@ -54,7 +54,7 @@
     („Menge pro Volumen ändert den Wert um …"). Daraus berechnet die App die nötige Menge für dein Becken.</p>
 
   {% for c in chemicals %}
-  <form method="post" action="/config/chemicals/{{ c.id }}" class="chem-row {% if not c.is_active %}inactive{% endif %}">
+  <form method="post" action="{{ base }}/config/chemicals/{{ c.id }}" class="chem-row {% if not c.is_active %}inactive{% endif %}">
     <div class="grid-chem">
       <label>Name<input type="text" name="name" value="{{ c.name }}"></label>
       <label>Zweck
@@ -85,14 +85,14 @@
     <label>Notiz<input type="text" name="notes" value="{{ c.notes or '' }}"></label>
     <div class="chem-actions">
       <button type="submit" class="btn small">Speichern</button>
-      <button type="submit" class="btn small danger" formaction="/config/chemicals/{{ c.id }}/delete">Löschen</button>
+      <button type="submit" class="btn small danger" formaction="{{ base }}/config/chemicals/{{ c.id }}/delete">Löschen</button>
     </div>
   </form>
   {% endfor %}
 
   <details class="add-chem">
     <summary>+ Neue Chemikalie hinzufügen</summary>
-    <form method="post" action="/config/chemicals" class="chem-row">
+    <form method="post" action="{{ base }}/config/chemicals" class="chem-row">
       <div class="grid-chem">
         <label>Name<input type="text" name="name" placeholder="z. B. pH-Minus"></label>
         <label>Zweck

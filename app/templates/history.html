@@ -26,7 +26,7 @@
           <td>{% if m.temperature is not none %}{{ "%g"|format(m.temperature) }}{% else %}–{% endif %}</td>
           <td class="note">{{ m.note or "" }}</td>
           <td>
-            <form method="post" action="/history/{{ m.id }}/delete" onsubmit="return confirm('Diesen Eintrag löschen?')">
+            <form method="post" action="{{ base }}/history/{{ m.id }}/delete" onsubmit="return confirm('Diesen Eintrag löschen?')">
               <button type="submit" class="btn small danger">✕</button>
             </form>
           </td>
@@ -36,7 +36,7 @@
     </table>
   </div>
   {% else %}
-  <p class="muted">Noch keine Messwerte erfasst. <a href="/">Jetzt eintragen →</a></p>
+  <p class="muted">Noch keine Messwerte erfasst. <a href="{{ base }}/">Jetzt eintragen →</a></p>
   {% endif %}
 </section>
 

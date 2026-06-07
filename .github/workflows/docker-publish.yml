@@ -1,0 +1,113 @@
+name: Docker-Image bauen & veröffentlichen
+
+# Baut Multi-Arch-Images (Raspberry Pi = arm64, sowie amd64) und schiebt sie
+# in die GitHub Container Registry (GHCR).
+#
+# Es werden zwei Varianten veröffentlicht:
+#   1. Architektur-getaggte Images für das Home-Assistant-Add-on:
+#         ghcr.io/<owner>/aarch64-poolsurveylance
+#         ghcr.io/<owner>/amd64-poolsurveylance
+#   2. Ein kombiniertes Multi-Arch-Image für "normales" Docker/Compose:
+#         ghcr.io/<owner>/poolsurveylance
+
+on:
+  push:
+    branches:
+      - "claude/pool-maintenance-app-ZPadX"
+      - "main"
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - arch: aarch64
+            platform: linux/arm64
+          - arch: amd64
+            platform: linux/amd64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Variablen vorbereiten (Owner kleinschreiben, Version ermitteln)
+        id: vars
+        run: |
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev" >> "$GITHUB_OUTPUT"
+          fi
+          echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: QEMU einrichten (für Cross-Build)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Docker Buildx einrichten
+        uses: docker/setup-buildx-action@v3
+
+      - name: An GHCR anmelden
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bauen & pushen (${{ matrix.arch }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: true
+          provenance: false
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.vars.outputs.owner }}/${{ matrix.arch }}-poolsurveylance:latest
+            ${{ env.REGISTRY }}/${{ steps.vars.outputs.owner }}/${{ matrix.arch }}-poolsurveylance:${{ steps.vars.outputs.version }}
+            ${{ env.REGISTRY }}/${{ steps.vars.outputs.owner }}/${{ matrix.arch }}-poolsurveylance:sha-${{ steps.vars.outputs.sha }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.arch }},mode=max
+
+  manifest:
+    # Kombiniert die Architektur-Images zu einem Multi-Arch-Image.
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Variablen vorbereiten
+        id: vars
+        run: |
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: An GHCR anmelden
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Multi-Arch-Manifest erstellen
+        run: |
+          OWNER="${{ steps.vars.outputs.owner }}"
+          VERSION="${{ steps.vars.outputs.version }}"
+          BASE="${REGISTRY}/${OWNER}/poolsurveylance"
+          for TAG in latest "${VERSION}"; do
+            docker buildx imagetools create -t "${BASE}:${TAG}" \
+              "${REGISTRY}/${OWNER}/aarch64-poolsurveylance:${TAG}" \
+              "${REGISTRY}/${OWNER}/amd64-poolsurveylance:${TAG}"
+          done

@@ -4,15 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="{{ base }}/static/style.css">
 </head>
 <body>
   <header class="topbar">
-    <a href="/" class="brand">💧 {{ app_name }}</a>
+    <a href="{{ base }}/" class="brand">💧 {{ app_name }}</a>
     <nav>
-      <a href="/" class="{% block nav_home %}{% endblock %}">Messung</a>
-      <a href="/history" class="{% block nav_history %}{% endblock %}">Verlauf</a>
-      <a href="/config" class="{% block nav_config %}{% endblock %}">Konfiguration</a>
+      <a href="{{ base }}/" class="{% block nav_home %}{% endblock %}">Messung</a>
+      <a href="{{ base }}/history" class="{% block nav_history %}{% endblock %}">Verlauf</a>
+      <a href="{{ base }}/config" class="{% block nav_config %}{% endblock %}">Konfiguration</a>
     </nav>
   </header>
   <main class="container">

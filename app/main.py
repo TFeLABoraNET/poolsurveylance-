@@ -59,6 +59,21 @@ def _parse_float(value: str | None) -> float | None:
         return None
 
 
+def _ingress_base(request: Request) -> str:
+    """Pfad-Prefix, unter dem die App läuft (Home-Assistant-Ingress).
+
+    Bei direktem Zugriff (eigener Port) ist der Header nicht gesetzt und es
+    wird ein leerer Prefix verwendet, sodass die URLs wie gewohnt mit "/"
+    beginnen.
+    """
+    return request.headers.get("X-Ingress-Path", "").rstrip("/")
+
+
+def _redirect(request: Request, path: str) -> RedirectResponse:
+    """Redirect, der den Ingress-Prefix berücksichtigt."""
+    return RedirectResponse(_ingress_base(request) + path, status_code=303)
+
+
 def _base_context(request: Request) -> dict:
     return {
         "request": request,
@@ -66,6 +81,7 @@ def _base_context(request: Request) -> dict:
         "mqtt_enabled": settings.mqtt_enabled,
         "parameters": PARAMETERS,
         "purposes": PURPOSES,
+        "base": _ingress_base(request),
     }
 
 
@@ -128,11 +144,11 @@ def history(request: Request, db: Session = Depends(get_db)):
 
 
 @app.post("/history/{measurement_id}/delete")
-def delete_measurement(measurement_id: int, db: Session = Depends(get_db)):
+def delete_measurement(measurement_id: int, request: Request, db: Session = Depends(get_db)):
     m = db.get(Measurement, measurement_id)
     if m:
         crud.delete_measurement(db, m)
-    return RedirectResponse("/history", status_code=303)
+    return _redirect(request, "/history")
 
 
 # --------------------------------------------------------------------------
@@ -167,7 +183,7 @@ async def update_config(request: Request, db: Session = Depends(get_db)):
     if name:
         cfg.name = name
     db.commit()
-    return RedirectResponse("/config", status_code=303)
+    return _redirect(request, "/config")
 
 
 @app.post("/config/chemicals")
@@ -186,14 +202,14 @@ async def add_chemical(request: Request, db: Session = Depends(get_db)):
         "is_active": 1,
     }
     crud.create_chemical(db, data)
-    return RedirectResponse("/config", status_code=303)
+    return _redirect(request, "/config")
 
 
 @app.post("/config/chemicals/{chem_id}")
 async def edit_chemical(chem_id: int, request: Request, db: Session = Depends(get_db)):
     chem = crud.get_chemical(db, chem_id)
     if chem is None:
-        return RedirectResponse("/config", status_code=303)
+        return _redirect(request, "/config")
     form = await request.form()
     data = {
         "name": (form.get("name") or chem.name).strip(),
@@ -207,15 +223,15 @@ async def edit_chemical(chem_id: int, request: Request, db: Session = Depends(ge
         "is_active": 1 if form.get("is_active") else 0,
     }
     crud.update_chemical(db, chem, data)
-    return RedirectResponse("/config", status_code=303)
+    return _redirect(request, "/config")
 
 
 @app.post("/config/chemicals/{chem_id}/delete")
-def remove_chemical(chem_id: int, db: Session = Depends(get_db)):
+def remove_chemical(chem_id: int, request: Request, db: Session = Depends(get_db)):
     chem = crud.get_chemical(db, chem_id)
     if chem:
         crud.delete_chemical(db, chem)
-    return RedirectResponse("/config", status_code=303)
+    return _redirect(request, "/config")
 
 
 # --------------------------------------------------------------------------

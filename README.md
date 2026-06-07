@@ -97,6 +97,71 @@ rest:
 
 ---
 
+## Deployment auf den Raspberry Pi mit Home Assistant OS
+
+Auf **HA OS** kannst du keine eigenen `docker`-Befehle ausführen – Container
+laufen dort ausschließlich als **Add-ons**. PoolSurveylance bringt daher ein
+fertiges Add-on mit, das ein per GitHub Actions vorgebautes Image aus der
+GitHub Container Registry (GHCR) zieht. Auf dem Pi muss also **nichts gebaut**
+werden.
+
+### Schritt 1 – Image per GitHub Actions veröffentlichen
+
+Der Workflow `.github/workflows/docker-publish.yml` baut die Images
+automatisch. Er läuft bei jedem Push auf den Branch und bei Versions-Tags.
+
+**Erstes Release erzeugen** (legt die Image-Tags `0.1.0` an, passend zur
+Add-on-Version):
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Unter *GitHub → Actions* siehst du den Build. Ergebnis sind u. a.:
+
+- `ghcr.io/<dein-user>/aarch64-poolsurveylance:0.1.0`  ← für den Pi (64-bit)
+- `ghcr.io/<dein-user>/amd64-poolsurveylance:0.1.0`
+- `ghcr.io/<dein-user>/poolsurveylance:0.1.0` (kombiniertes Multi-Arch-Image)
+
+### Schritt 2 – GHCR-Paket öffentlich schalten
+
+Damit der HA-Supervisor das Image ohne Login ziehen kann:
+*GitHub → dein Profil/Org → Packages →* das Paket
+`aarch64-poolsurveylance` (und `amd64-poolsurveylance`) öffnen →
+*Package settings → Change visibility → Public*.
+
+> **Achtung Groß-/Kleinschreibung:** GHCR verlangt einen klein geschriebenen
+> Owner-Namen. In `addon/config.yaml` ist der Owner bereits als
+> `tfelaboranet` hinterlegt – passe ihn an, falls dein GitHub-Benutzer anders
+> heißt.
+
+### Schritt 3 – Add-on in Home Assistant installieren
+
+1. **Einstellungen → Add-ons → Add-on Store → ⋮ (oben rechts) → Repositories**
+   und die Repo-URL hinzufügen:
+   `https://github.com/TFeLABoraNET/poolsurveylance-`
+2. Im Store erscheint **PoolSurveylance** → *Installieren*.
+3. *Starten*. Die App tauct als **Pool** in der Seitenleiste auf (Ingress,
+   inkl. HA-Login – kein offener Port nötig).
+
+Im Tab *Konfiguration* des Add-ons trägst du bei Bedarf deine MQTT-Daten ein
+(`mqtt_host: core-mosquitto`, falls du das Mosquitto-Add-on nutzt). Details
+siehe [`addon/DOCS.md`](addon/DOCS.md).
+
+> **Updates:** Neue Version taggen (`git tag v0.1.1 && git push origin v0.1.1`),
+> in `addon/config.yaml` die `version` auf `0.1.1` setzen und pushen – Home
+> Assistant bietet dann ein Update an.
+
+### Alternative ohne HA OS
+
+Läuft Home Assistant bei dir als Container (HA Container) oder hast du eine
+separate Maschine, kannst du PoolSurveylance einfach per
+`docker compose up -d` betreiben (siehe oben) und HA per MQTT oder
+REST-Sensor anbinden.
+
+---
+
 ## Wie wird die Dosis berechnet?
 
 Jede Chemikalie speichert ihre Referenz-Dosierung in der Form
@@ -130,6 +195,9 @@ app/
   templates/     – HTML-Oberfläche (Jinja2)
   static/        – CSS
 tests/           – Tests der Dosier-Logik
+addon/           – Home-Assistant-Add-on (config.yaml, Doku)
+repository.yaml  – macht das Repo zu einem HA-Add-on-Repository
+.github/workflows/docker-publish.yml – Multi-Arch-Build nach GHCR
 Dockerfile, docker-compose.yml
 ```
 

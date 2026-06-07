@@ -1,8 +1,8 @@
 services:
   poolsurveylance:
     build: .
-    # Alternativ ein vorgebautes Image verwenden:
-    # image: ghcr.io/dein-user/poolsurveylance:latest
+    # Alternativ das vorgebaute Multi-Arch-Image verwenden (statt build):
+    # image: ghcr.io/tfelaboranet/poolsurveylance:latest
     container_name: poolsurveylance
     restart: unless-stopped
     ports:

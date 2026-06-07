@@ -1,8 +1,17 @@
-"""Anwendungs-Einstellungen (aus Umgebungsvariablen / .env)."""
+"""Anwendungs-Einstellungen (aus Umgebungsvariablen / .env / HA-Add-on)."""
 
 from __future__ import annotations
 
+import json
+import logging
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger("poolsurveylance.config")
+
+# Home-Assistant-Add-ons stellen ihre Benutzeroptionen hier bereit.
+HA_OPTIONS_PATH = Path("/data/options.json")
 
 
 class Settings(BaseSettings):
@@ -34,4 +43,38 @@ class Settings(BaseSettings):
     device_id: str = "poolsurveylance"
 
 
-settings = Settings()
+# Optionen, die ein Home-Assistant-Add-on über /data/options.json setzen kann.
+# Schlüssel = Name in der Add-on-Konfiguration, Wert = Attribut in Settings.
+_HA_OPTION_MAP = {
+    "mqtt_enabled": "mqtt_enabled",
+    "mqtt_host": "mqtt_host",
+    "mqtt_port": "mqtt_port",
+    "mqtt_username": "mqtt_username",
+    "mqtt_password": "mqtt_password",
+    "mqtt_base_topic": "mqtt_base_topic",
+    "mqtt_discovery_prefix": "mqtt_discovery_prefix",
+    "device_id": "device_id",
+}
+
+
+def _apply_ha_addon_options(s: Settings) -> Settings:
+    """Übernimmt Optionen aus einem Home-Assistant-Add-on, falls vorhanden.
+
+    Leere Strings (z. B. nicht gesetzter Benutzername) werden ignoriert,
+    damit sie sinnvolle Standardwerte nicht überschreiben.
+    """
+    if not HA_OPTIONS_PATH.is_file():
+        return s
+    try:
+        options = json.loads(HA_OPTIONS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:  # pragma: no cover - defensiv
+        logger.warning("HA-Add-on-Optionen konnten nicht gelesen werden: %s", exc)
+        return s
+    for key, attr in _HA_OPTION_MAP.items():
+        if key in options and options[key] not in (None, ""):
+            setattr(s, attr, options[key])
+    logger.info("Home-Assistant-Add-on-Optionen übernommen.")
+    return s
+
+
+settings = _apply_ha_addon_options(Settings())
