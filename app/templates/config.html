@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block nav_config %}active{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>Pool-Konfiguration</h2>
+  <form method="post" action="/config">
+    <label>Bezeichnung
+      <input type="text" name="name" value="{{ config.name }}">
+    </label>
+    <div class="grid2">
+      <label>Beckenvolumen (m³)
+        <input type="text" inputmode="decimal" name="volume_m3" value="{{ '%g'|format(config.volume_m3) }}">
+      </label>
+      <label>Pumpen-Durchfluss (m³/h)
+        <input type="text" inputmode="decimal" name="pump_flow_m3h" value="{{ '%g'|format(config.pump_flow_m3h) }}">
+      </label>
+    </div>
+
+    <h3>Zielwerte (Min / Soll / Max)</h3>
+    <table class="targets">
+      <tr>
+        <th>pH-Wert</th>
+        <td><input type="text" inputmode="decimal" name="ph_min" value="{{ '%g'|format(config.ph_min) }}"></td>
+        <td><input type="text" inputmode="decimal" name="ph_target" value="{{ '%g'|format(config.ph_target) }}"></td>
+        <td><input type="text" inputmode="decimal" name="ph_max" value="{{ '%g'|format(config.ph_max) }}"></td>
+      </tr>
+      <tr>
+        <th>Freies Chlor (mg/l)</th>
+        <td><input type="text" inputmode="decimal" name="free_cl_min" value="{{ '%g'|format(config.free_cl_min) }}"></td>
+        <td><input type="text" inputmode="decimal" name="free_cl_target" value="{{ '%g'|format(config.free_cl_target) }}"></td>
+        <td><input type="text" inputmode="decimal" name="free_cl_max" value="{{ '%g'|format(config.free_cl_max) }}"></td>
+      </tr>
+      <tr>
+        <th>Alkalinität TA (mg/l)</th>
+        <td><input type="text" inputmode="decimal" name="ta_min" value="{{ '%g'|format(config.ta_min) }}"></td>
+        <td><input type="text" inputmode="decimal" name="ta_target" value="{{ '%g'|format(config.ta_target) }}"></td>
+        <td><input type="text" inputmode="decimal" name="ta_max" value="{{ '%g'|format(config.ta_max) }}"></td>
+      </tr>
+      <tr>
+        <th>Cyanursäure (mg/l)</th>
+        <td><input type="text" inputmode="decimal" name="cya_min" value="{{ '%g'|format(config.cya_min) }}"></td>
+        <td><input type="text" inputmode="decimal" name="cya_target" value="{{ '%g'|format(config.cya_target) }}"></td>
+        <td><input type="text" inputmode="decimal" name="cya_max" value="{{ '%g'|format(config.cya_max) }}"></td>
+      </tr>
+    </table>
+    <button type="submit" class="btn primary">Konfiguration speichern</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Chemikalien</h2>
+  <p class="muted small">Trage die Dosierung so ein, wie sie auf der Verpackung steht
+    („Menge pro Volumen ändert den Wert um …"). Daraus berechnet die App die nötige Menge für dein Becken.</p>
+
+  {% for c in chemicals %}
+  <form method="post" action="/config/chemicals/{{ c.id }}" class="chem-row {% if not c.is_active %}inactive{% endif %}">
+    <div class="grid-chem">
+      <label>Name<input type="text" name="name" value="{{ c.name }}"></label>
+      <label>Zweck
+        <select name="purpose">
+          {% for key, info in purposes.items() %}
+          <option value="{{ key }}" {% if c.purpose == key %}selected{% endif %}>{{ info.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Einheit
+        <select name="unit">
+          <option value="g" {% if c.unit == 'g' %}selected{% endif %}>g</option>
+          <option value="ml" {% if c.unit == 'ml' %}selected{% endif %}>ml</option>
+        </select>
+      </label>
+    </div>
+    <div class="dose-line">
+      <input type="text" inputmode="decimal" name="ref_dose_amount" value="{{ '%g'|format(c.ref_dose_amount) }}" title="Menge">
+      <span>{{ c.unit }} pro</span>
+      <input type="text" inputmode="decimal" name="ref_volume_m3" value="{{ '%g'|format(c.ref_volume_m3) }}" title="Volumen">
+      <span>m³ ändert Wert um</span>
+      <input type="text" inputmode="decimal" name="ref_effect_delta" value="{{ '%g'|format(c.ref_effect_delta) }}" title="Effekt">
+    </div>
+    <div class="grid-chem">
+      <label>Wirkstoff %<input type="text" inputmode="decimal" name="active_ingredient_pct" value="{% if c.active_ingredient_pct is not none %}{{ '%g'|format(c.active_ingredient_pct) }}{% endif %}"></label>
+      <label class="checkbox-inline"><input type="checkbox" name="is_active" {% if c.is_active %}checked{% endif %}> aktiv</label>
+    </div>
+    <label>Notiz<input type="text" name="notes" value="{{ c.notes or '' }}"></label>
+    <div class="chem-actions">
+      <button type="submit" class="btn small">Speichern</button>
+      <button type="submit" class="btn small danger" formaction="/config/chemicals/{{ c.id }}/delete">Löschen</button>
+    </div>
+  </form>
+  {% endfor %}
+
+  <details class="add-chem">
+    <summary>+ Neue Chemikalie hinzufügen</summary>
+    <form method="post" action="/config/chemicals" class="chem-row">
+      <div class="grid-chem">
+        <label>Name<input type="text" name="name" placeholder="z. B. pH-Minus"></label>
+        <label>Zweck
+          <select name="purpose">
+            {% for key, info in purposes.items() %}
+            <option value="{{ key }}">{{ info.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Einheit
+          <select name="unit"><option value="g">g</option><option value="ml">ml</option></select>
+        </label>
+      </div>
+      <div class="dose-line">
+        <input type="text" inputmode="decimal" name="ref_dose_amount" placeholder="100">
+        <span>pro</span>
+        <input type="text" inputmode="decimal" name="ref_volume_m3" placeholder="10">
+        <span>m³ ändert Wert um</span>
+        <input type="text" inputmode="decimal" name="ref_effect_delta" placeholder="0,1">
+      </div>
+      <label>Notiz<input type="text" name="notes" placeholder="optional"></label>
+      <button type="submit" class="btn primary small">Hinzufügen</button>
+    </form>
+  </details>
+</section>
+
+{% endblock %}

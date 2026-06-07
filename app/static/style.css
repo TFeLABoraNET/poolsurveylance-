@@ -1,0 +1,150 @@
+:root {
+  --bg: #0e1726;
+  --card: #16213a;
+  --card-2: #1d2b48;
+  --text: #e7eefc;
+  --muted: #93a3c4;
+  --line: #2a3a5c;
+  --primary: #1f9be0;
+  --primary-d: #1582c0;
+  --ok: #2bb673;
+  --low: #e0a52b;
+  --high: #e05b4a;
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: .5rem;
+  padding: .8rem 1rem;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 10;
+}
+.brand { font-weight: 700; font-size: 1.15rem; color: var(--text); text-decoration: none; }
+.topbar nav { display: flex; gap: .25rem; }
+.topbar nav a {
+  color: var(--muted); text-decoration: none;
+  padding: .4rem .8rem; border-radius: 8px; font-size: .95rem;
+}
+.topbar nav a:hover { background: var(--card-2); color: var(--text); }
+.topbar nav a.active { background: var(--primary); color: #fff; }
+
+.container { max-width: 860px; margin: 0 auto; padding: 1rem; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 1.1rem;
+}
+.card h2 { margin: 0 0 .9rem; font-size: 1.2rem; }
+.card h3 { margin: 1.2rem 0 .5rem; font-size: 1rem; color: var(--muted); }
+
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+small.muted { font-weight: 400; font-size: .8rem; }
+
+/* Status-Karten */
+.status-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .7rem;
+}
+.status {
+  border-radius: 10px; padding: .7rem .8rem;
+  background: var(--card-2); border-left: 4px solid var(--line);
+}
+.status-ok { border-left-color: var(--ok); }
+.status-low { border-left-color: var(--low); }
+.status-high { border-left-color: var(--high); }
+.status-unknown { border-left-color: var(--line); opacity: .65; }
+.status-label { font-size: .8rem; color: var(--muted); }
+.status-value { font-size: 1.5rem; font-weight: 700; }
+.status-value .unit { font-size: .8rem; font-weight: 400; color: var(--muted); }
+.status-meta { font-size: .78rem; }
+.status-ok .status-meta { color: var(--ok); }
+.status-low .status-meta { color: var(--low); }
+.status-high .status-meta { color: var(--high); }
+
+/* Dosier-Tabelle */
+.dose-table { width: 100%; border-collapse: collapse; }
+.dose-table th, .dose-table td { text-align: left; padding: .6rem .4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.dose-table .right, .right { text-align: right; }
+.amount { font-weight: 700; font-size: 1.05rem; white-space: nowrap; color: var(--primary); }
+.ok-msg { color: var(--ok); font-weight: 600; }
+
+/* Formulare */
+label { display: block; margin: .55rem 0; font-size: .9rem; color: var(--muted); }
+input[type=text], select {
+  width: 100%; margin-top: .25rem; padding: .55rem .6rem;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); font-size: 1rem;
+}
+input:focus, select:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 .8rem; }
+
+.btn {
+  display: inline-block; cursor: pointer;
+  padding: .6rem 1rem; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card-2); color: var(--text); font-size: .95rem;
+}
+.btn:hover { background: var(--line); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.btn.primary:hover { background: var(--primary-d); }
+.btn.small { padding: .35rem .7rem; font-size: .85rem; }
+.btn.danger { color: #ffb3aa; border-color: #5c2a2a; background: #2a1818; }
+.btn.danger:hover { background: #3a1f1f; }
+.measure-form button { margin-top: .8rem; }
+
+/* Zielwerte-Tabelle */
+.targets { width: 100%; border-collapse: collapse; }
+.targets th { text-align: left; padding: .3rem .5rem .3rem 0; font-weight: 500; white-space: nowrap; }
+.targets td { padding: .2rem; }
+.targets input { width: 80px; }
+
+/* Chemikalien */
+.chem-row { border: 1px solid var(--line); border-radius: 10px; padding: .8rem; margin-bottom: .8rem; background: var(--card-2); }
+.chem-row.inactive { opacity: .55; }
+.grid-chem { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 0 .7rem; }
+.dose-line { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; margin: .5rem 0; font-size: .9rem; color: var(--muted); }
+.dose-line input { width: 80px; }
+.checkbox-inline { display: flex; align-items: center; gap: .4rem; margin-top: 1.6rem; }
+.checkbox-inline input { width: auto; }
+.chem-actions { display: flex; gap: .5rem; margin-top: .5rem; }
+.add-chem summary { cursor: pointer; color: var(--primary); padding: .5rem 0; }
+
+/* Verlauf */
+.table-scroll { overflow-x: auto; }
+.history { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.history th, .history td { padding: .5rem .5rem; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
+.history th { color: var(--muted); font-weight: 500; }
+.history .note { text-align: left; white-space: normal; color: var(--muted); }
+
+/* Flash / Hinweise */
+.flash { padding: .7rem .9rem; border-radius: 8px; margin: .6rem 0; font-size: .92rem; }
+.flash.success { background: #14352a; color: #8ff0c0; border: 1px solid #1f5e44; }
+.flash.warn { background: #3a3115; color: #f2d98a; border: 1px solid #6b5a1f; }
+
+.badge { background: var(--primary); color: #fff; padding: .15rem .5rem; border-radius: 6px; font-size: .75rem; }
+.badge.small { background: var(--line); color: var(--muted); }
+
+.footer {
+  max-width: 860px; margin: 0 auto; padding: 1rem;
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  color: var(--muted); font-size: .8rem;
+}
+
+@media (max-width: 560px) {
+  .grid2, .grid-chem { grid-template-columns: 1fr; }
+  .status-value { font-size: 1.3rem; }
+}

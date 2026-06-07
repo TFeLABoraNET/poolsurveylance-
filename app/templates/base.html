@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a href="/" class="brand">💧 {{ app_name }}</a>
+    <nav>
+      <a href="/" class="{% block nav_home %}{% endblock %}">Messung</a>
+      <a href="/history" class="{% block nav_history %}{% endblock %}">Verlauf</a>
+      <a href="/config" class="{% block nav_config %}{% endblock %}">Konfiguration</a>
+    </nav>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">
+    <span>PoolSurveylance · Dosiermengen sind Schätzwerte – immer nachmessen.</span>
+    {% if mqtt_enabled %}<span class="badge">MQTT aktiv</span>{% endif %}
+  </footer>
+</body>
+</html>

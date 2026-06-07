@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block nav_home %}active{% endblock %}
+{% block content %}
+
+{% if saved %}
+<div class="flash success">✓ Messung gespeichert. Aktueller Dosiervorschlag unten.</div>
+{% endif %}
+
+{% if evaluation %}
+<section class="card">
+  <h2>Wasserstatus
+    <small class="muted">vom {{ latest.measured_at.strftime("%d.%m.%Y %H:%M") }}</small>
+  </h2>
+  <div class="status-grid">
+    {% for s in evaluation.statuses %}
+    <div class="status status-{{ s.status }}">
+      <div class="status-label">{{ s.label }}</div>
+      <div class="status-value">
+        {% if s.value is not none %}{{ "%g"|format(s.value) }}{% else %}–{% endif %}
+        <span class="unit">{{ s.unit }}</span>
+      </div>
+      <div class="status-meta">
+        {{ s.status_label }}
+        {% if s.range_min is not none %}
+          <br><span class="muted">Soll {{ "%g"|format(s.range_min) }}–{{ "%g"|format(s.range_max) }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="card">
+  <h2>Dosiervorschlag</h2>
+  {% if evaluation.suggestions %}
+  <table class="dose-table">
+    <thead>
+      <tr><th>Maßnahme</th><th>Chemikalie</th><th class="right">Menge</th></tr>
+    </thead>
+    <tbody>
+      {% for d in evaluation.suggestions %}
+      <tr>
+        <td>
+          <strong>{{ d.parameter }}</strong>
+          <div class="muted small">{{ d.reason }}</div>
+        </td>
+        <td>{{ d.chemical_name }}</td>
+        <td class="right amount">{{ "%g"|format(d.amount) }} {{ d.unit }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="ok-msg">✓ Alles im grünen Bereich – aktuell keine Dosierung nötig.</p>
+  {% endif %}
+
+  {% if evaluation.turnover_hours %}
+  <p class="muted small">Umwälzzeit (1× Beckenvolumen): ca. {{ evaluation.turnover_hours }} h.
+    Nach dem Zugeben Pumpe laufen lassen, damit sich alles verteilt.</p>
+  {% endif %}
+
+  {% for w in evaluation.warnings %}
+  <div class="flash warn">⚠ {{ w }}</div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Neue Messung eintragen</h2>
+  <form method="post" action="/measurements" class="measure-form">
+    <div class="grid2">
+      <label>pH-Wert
+        <input type="text" inputmode="decimal" name="ph"
+               value="{% if latest and latest.ph is not none %}{{ '%g'|format(latest.ph) }}{% endif %}"
+               placeholder="z. B. 7,2">
+      </label>
+      <label>Freies Chlor (mg/l)
+        <input type="text" inputmode="decimal" name="free_cl"
+               value="{% if latest and latest.free_cl is not none %}{{ '%g'|format(latest.free_cl) }}{% endif %}"
+               placeholder="z. B. 1,5">
+      </label>
+      <label>Gesamtchlor (mg/l)
+        <input type="text" inputmode="decimal" name="total_cl"
+               value="{% if latest and latest.total_cl is not none %}{{ '%g'|format(latest.total_cl) }}{% endif %}"
+               placeholder="optional">
+      </label>
+      <label>Gesamtalkalinität TA (mg/l)
+        <input type="text" inputmode="decimal" name="ta"
+               value="{% if latest and latest.ta is not none %}{{ '%g'|format(latest.ta) }}{% endif %}"
+               placeholder="z. B. 100">
+      </label>
+      <label>Cyanursäure (mg/l)
+        <input type="text" inputmode="decimal" name="cya"
+               value="{% if latest and latest.cya is not none %}{{ '%g'|format(latest.cya) }}{% endif %}"
+               placeholder="z. B. 40">
+      </label>
+      <label>Wassertemperatur (°C)
+        <input type="text" inputmode="decimal" name="temperature"
+               value="{% if latest and latest.temperature is not none %}{{ '%g'|format(latest.temperature) }}{% endif %}"
+               placeholder="optional">
+      </label>
+    </div>
+    <label>Notiz
+      <input type="text" name="note" placeholder="optional, z. B. nach Stoßchlorung">
+    </label>
+    <button type="submit" class="btn primary">Messung speichern & Vorschlag berechnen</button>
+  </form>
+  <p class="muted small">Tipp: Felder sind mit deiner letzten Messung vorbelegt – einfach die geänderten Werte anpassen.</p>
+</section>
+
+{% endblock %}

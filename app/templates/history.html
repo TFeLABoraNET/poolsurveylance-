@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block nav_history %}active{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>Messwert-Verlauf</h2>
+  {% if measurements %}
+  <div class="table-scroll">
+    <table class="history">
+      <thead>
+        <tr>
+          <th>Datum</th><th>Quelle</th><th>pH</th><th>Cl frei</th><th>Cl ges.</th>
+          <th>TA</th><th>CYA</th><th>°C</th><th>Notiz</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in measurements %}
+        <tr>
+          <td>{{ m.measured_at.strftime("%d.%m.%y %H:%M") }}</td>
+          <td><span class="badge small">{{ m.source }}</span></td>
+          <td>{% if m.ph is not none %}{{ "%g"|format(m.ph) }}{% else %}–{% endif %}</td>
+          <td>{% if m.free_cl is not none %}{{ "%g"|format(m.free_cl) }}{% else %}–{% endif %}</td>
+          <td>{% if m.total_cl is not none %}{{ "%g"|format(m.total_cl) }}{% else %}–{% endif %}</td>
+          <td>{% if m.ta is not none %}{{ "%g"|format(m.ta) }}{% else %}–{% endif %}</td>
+          <td>{% if m.cya is not none %}{{ "%g"|format(m.cya) }}{% else %}–{% endif %}</td>
+          <td>{% if m.temperature is not none %}{{ "%g"|format(m.temperature) }}{% else %}–{% endif %}</td>
+          <td class="note">{{ m.note or "" }}</td>
+          <td>
+            <form method="post" action="/history/{{ m.id }}/delete" onsubmit="return confirm('Diesen Eintrag löschen?')">
+              <button type="submit" class="btn small danger">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Noch keine Messwerte erfasst. <a href="/">Jetzt eintragen →</a></p>
+  {% endif %}
+</section>
+
+{% endblock %}

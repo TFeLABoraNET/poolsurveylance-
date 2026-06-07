@@ -1,0 +1,12 @@
+.git
+.gitignore
+data/
+*.db
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+tests/
+README.md
+docs/
