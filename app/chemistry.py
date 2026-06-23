@@ -34,6 +34,7 @@ PARAMETERS: dict[str, dict] = {
     "total_cl": {"label": "Gesamtchlor", "unit": "mg/l", "decimals": 1},
     "ta": {"label": "Gesamtalkalinität (TA)", "unit": "mg/l", "decimals": 0},
     "cya": {"label": "Cyanursäure (Stabilisator)", "unit": "mg/l", "decimals": 0},
+    "orp": {"label": "Redox / ORP", "unit": "mV", "decimals": 0},
     "temperature": {"label": "Wassertemperatur", "unit": "°C", "decimals": 1},
 }
 
@@ -209,6 +210,12 @@ def evaluate(cfg: PoolConfig, m: Measurement, chemicals: list[Chemical]) -> Eval
                         cfg.cya_target, cfg.cya_min, cfg.cya_max,
                         _classify(m.cya, cfg.cya_min, cfg.cya_max)),
     ]
+    if m.orp is not None:
+        ev.statuses.append(
+            ParameterStatus("orp", PARAMETERS["orp"]["label"], "mV", m.orp,
+                            cfg.orp_target, cfg.orp_min, cfg.orp_max,
+                            _classify(m.orp, cfg.orp_min, cfg.orp_max))
+        )
     if m.temperature is not None:
         ev.statuses.append(
             ParameterStatus("temperature", PARAMETERS["temperature"]["label"], "°C",
@@ -323,6 +330,25 @@ def evaluate(cfg: PoolConfig, m: Measurement, chemicals: list[Chemical]) -> Eval
             f"Das schwächt die Chlorwirkung erheblich. "
             f"Empfehlung: ca. {liters:,.0f} Liter Wasser tauschen, um CYA auf "
             f"~{cfg.cya_dilution_target:g} mg/l zu senken."
+        )
+
+    # --- Redox / ORP (Desinfektionskraft) ---
+    # ORP wird nicht direkt dosiert: er ergibt sich aus freiem Chlor UND pH
+    # (niedriger pH => höheres ORP). Daher nur Hinweise, keine Dosiermenge.
+    if m.orp is not None and m.orp < cfg.orp_min:
+        hint = ""
+        if m.ph is not None and m.ph > cfg.ph_target:
+            hint = " Der pH ist zu hoch – ihn zu senken hebt auch das ORP an."
+        elif m.free_cl is not None and m.free_cl < effective_fc_min(cfg, m.cya):
+            hint = " Das freie Chlor ist niedrig – Chlor nachdosieren."
+        ev.warnings.append(
+            f"Redox/ORP ist mit {m.orp:g} mV niedrig (Soll ≥ {cfg.orp_min:g} mV). "
+            f"Die Desinfektionskraft ist schwach.{hint}"
+        )
+    elif m.orp is not None and m.orp > cfg.orp_max:
+        ev.warnings.append(
+            f"Redox/ORP ist mit {m.orp:g} mV sehr hoch (> {cfg.orp_max:g} mV). "
+            "Meist zu viel Chlor oder zu niedriger pH – Werte prüfen."
         )
 
     # --- Dynamisches Chlor-Minimum Hinweis ---

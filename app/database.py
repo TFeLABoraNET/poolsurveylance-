@@ -45,6 +45,18 @@ def migrate_schema(eng) -> None:
         ("chemicals", "stock_updated_at", "TEXT"),
         ("pump_logs", "source", "TEXT DEFAULT 'manual'"),
         ("tablet_dispensers", "tab_lifetime_days", "REAL DEFAULT 10.0"),
+        ("measurements", "orp", "REAL"),
+        ("pool_config", "orp_min", "REAL DEFAULT 650.0"),
+        ("pool_config", "orp_target", "REAL DEFAULT 700.0"),
+        ("pool_config", "orp_max", "REAL DEFAULT 800.0"),
+        ("pool_config", "dosing_enabled", "INTEGER DEFAULT 0"),
+        ("pool_config", "acid_concentration_pct", "REAL DEFAULT 15.0"),
+        ("pool_config", "dose_ml_per_shot", "REAL DEFAULT 100.0"),
+        ("pool_config", "dose_max_ml_day", "REAL DEFAULT 1000.0"),
+        ("pool_config", "dose_pump_ml_per_min", "REAL DEFAULT 60.0"),
+        ("pool_config", "dose_wait_minutes", "REAL DEFAULT 15.0"),
+        ("pool_config", "ph_dose_deadband", "REAL DEFAULT 0.1"),
+        ("pool_config", "ph_dose_floor", "REAL DEFAULT 6.8"),
     ]
     with eng.connect() as conn:
         for table, col, typedef in new_cols:

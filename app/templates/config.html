@@ -46,6 +46,12 @@
         <td><input type="text" inputmode="decimal" name="cya_target" value="{{ '%g'|format(config.cya_target) }}"></td>
         <td><input type="text" inputmode="decimal" name="cya_max" value="{{ '%g'|format(config.cya_max) }}"></td>
       </tr>
+      <tr>
+        <th>Redox / ORP (mV)</th>
+        <td><input type="text" inputmode="decimal" name="orp_min" value="{{ '%g'|format(config.orp_min) }}"></td>
+        <td><input type="text" inputmode="decimal" name="orp_target" value="{{ '%g'|format(config.orp_target) }}"></td>
+        <td><input type="text" inputmode="decimal" name="orp_max" value="{{ '%g'|format(config.orp_max) }}"></td>
+      </tr>
       </tbody>
     </table>
 
@@ -72,6 +78,52 @@
         <input type="text" inputmode="decimal" name="backwash_interval_hours"
                value="{{ '%g'|format(config.backwash_interval_hours) }}"
                title="Nach dieser Laufzeit wird Rückspülen empfohlen">
+      </label>
+    </div>
+
+    <h3>Automatische pH-Minus-Dosierung (Säurepumpe)</h3>
+    <p class="muted small">Sollwerte und <strong>Schutzgrenzen</strong> für den ESP32-Dosiercontroller.
+      Die Regelung läuft autonom auf dem ESP32; diese Werte werden (bei aktivem MQTT) dorthin gespiegelt
+      und begrenzen die Tagesmenge. Freigeben/Stoppen im Tab <a href="{{ base }}/dosing">Dosierung</a>.</p>
+    <label class="checkbox-inline">
+      <input type="checkbox" name="dosing_enabled" {% if config.dosing_enabled %}checked{% endif %}>
+      Automatische Säure-Dosierung freigeben
+    </label>
+    <div class="grid2">
+      <label>Säurekonzentration (%)
+        <input type="text" inputmode="decimal" name="acid_concentration_pct"
+               value="{{ '%g'|format(config.acid_concentration_pct) }}"
+               title="z. B. 15 % verdünnte Schwefelsäure">
+      </label>
+      <label>Menge pro Dosierstoß (ml)
+        <input type="text" inputmode="decimal" name="dose_ml_per_shot"
+               value="{{ '%g'|format(config.dose_ml_per_shot) }}"
+               title="Kleiner Stoß, dann Durchmischen abwarten">
+      </label>
+      <label>Tages-Höchstmenge (ml) — harte Grenze
+        <input type="text" inputmode="decimal" name="dose_max_ml_day"
+               value="{{ '%g'|format(config.dose_max_ml_day) }}"
+               title="Sicherheits-Obergrenze pro Tag">
+      </label>
+      <label>Pumpenleistung (ml/min)
+        <input type="text" inputmode="decimal" name="dose_pump_ml_per_min"
+               value="{{ '%g'|format(config.dose_pump_ml_per_min) }}"
+               title="Förderleistung der Quetschschlauchpumpe – für ml↔Sekunden">
+      </label>
+      <label>Wartezeit nach Stoß (min)
+        <input type="text" inputmode="decimal" name="dose_wait_minutes"
+               value="{{ '%g'|format(config.dose_wait_minutes) }}"
+               title="Durchmischen/Equilibrieren vor der nächsten Messung">
+      </label>
+      <label>pH-Totband (über Ziel)
+        <input type="text" inputmode="decimal" name="ph_dose_deadband"
+               value="{{ '%g'|format(config.ph_dose_deadband) }}"
+               title="Erst dosieren, wenn pH > Ziel + Totband">
+      </label>
+      <label>pH-Sicherheitsboden
+        <input type="text" inputmode="decimal" name="ph_dose_floor"
+               value="{{ '%g'|format(config.ph_dose_floor) }}"
+               title="Unter diesem pH wird NIE dosiert">
       </label>
     </div>
 

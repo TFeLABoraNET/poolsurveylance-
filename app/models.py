@@ -41,6 +41,27 @@ class PoolConfig(Base):
     cya_target: Mapped[float] = mapped_column(Float, default=40.0)
     cya_max: Mapped[float] = mapped_column(Float, default=50.0)
 
+    # Redox / ORP (mV) – Maß für die Desinfektionskraft (korreliert mit Chlor).
+    orp_min: Mapped[float] = mapped_column(Float, default=650.0)
+    orp_target: Mapped[float] = mapped_column(Float, default=700.0)
+    orp_max: Mapped[float] = mapped_column(Float, default=800.0)
+
+    # --- Automatische pH-Minus-Dosierung (Schwefelsäure, Quetschschlauchpumpe) ---
+    # Die eigentliche Regelung läuft autonom auf dem ESP32 (ESPHome). Diese
+    # Werte sind die Sollvorgaben/Schutzgrenzen, die die App führt, anzeigt und
+    # (optional per MQTT) an den ESP32 spiegelt. Sicherheits-kritisch: konservativ.
+    dosing_enabled: Mapped[bool] = mapped_column(Integer, default=0)
+    acid_concentration_pct: Mapped[float] = mapped_column(Float, default=15.0)
+    # Säurelösung in g/l? Nein – wir rechnen in ml Lösung (einfach + robust).
+    dose_ml_per_shot: Mapped[float] = mapped_column(Float, default=100.0)
+    dose_max_ml_day: Mapped[float] = mapped_column(Float, default=1000.0)
+    dose_pump_ml_per_min: Mapped[float] = mapped_column(Float, default=60.0)
+    dose_wait_minutes: Mapped[float] = mapped_column(Float, default=15.0)
+    # Erst dosieren, wenn pH über Ziel + Totband liegt (verhindert Pendeln).
+    ph_dose_deadband: Mapped[float] = mapped_column(Float, default=0.1)
+    # Harte Untergrenze: unter diesem pH wird NIE dosiert (Sicherheitsboden).
+    ph_dose_floor: Mapped[float] = mapped_column(Float, default=6.8)
+
     # Erweiterungen
     fc_min_dynamic: Mapped[bool] = mapped_column(Integer, default=0)
     cya_warning_level: Mapped[float] = mapped_column(Float, default=70.0)
@@ -93,8 +114,36 @@ class Measurement(Base):
     total_cl: Mapped[float | None] = mapped_column(Float, nullable=True)
     ta: Mapped[float | None] = mapped_column(Float, nullable=True)
     cya: Mapped[float | None] = mapped_column(Float, nullable=True)
+    orp: Mapped[float | None] = mapped_column(Float, nullable=True)
     temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class DoseEvent(Base):
+    """Protokoll einer automatischen Säure-Dosierung (pH-Minus).
+
+    Wird vom ESP32-Dosiercontroller nach jedem Dosierstoß gemeldet (HTTP/MQTT).
+    Dient der Nachverfolgung, der Tagesmengen-Begrenzung und als Sicherheits-
+    Audit-Trail (wie viel Säure wurde wann auf welcher Grundlage zugegeben).
+    """
+
+    __tablename__ = "dose_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    dosed_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    source: Mapped[str] = mapped_column(String(20), default="esp32")
+
+    # Welches Mittel (Vorrat ist meist "ph_minus"); hier fix für die Säurepumpe.
+    purpose: Mapped[str] = mapped_column(String(20), default="ph_minus")
+    ml: Mapped[float] = mapped_column(Float, default=0.0)
+    pump_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    ph_before: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ph_target: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # "auto" (Regler), "manual" (Hand-Auslösung), "fault" (abgebrochen)
+    trigger: Mapped[str] = mapped_column(String(12), default="auto")
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 

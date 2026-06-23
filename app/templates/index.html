@@ -94,6 +94,11 @@
                value="{% if latest and latest.cya is not none %}{{ '%g'|format(latest.cya) }}{% endif %}"
                placeholder="z. B. 40">
       </label>
+      <label>Redox / ORP (mV)
+        <input type="text" inputmode="decimal" name="orp"
+               value="{% if latest and latest.orp is not none %}{{ '%g'|format(latest.orp) }}{% endif %}"
+               placeholder="z. B. 700">
+      </label>
       <label>Wassertemperatur (°C)
         <input type="text" inputmode="decimal" name="temperature"
                value="{% if latest and latest.temperature is not none %}{{ '%g'|format(latest.temperature) }}{% endif %}"

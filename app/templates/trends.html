@@ -24,6 +24,10 @@
       <canvas id="chartCYA"></canvas>
     </div>
     <div class="chart-box">
+      <h3>Redox / ORP (mV)</h3>
+      <canvas id="chartORP"></canvas>
+    </div>
+    <div class="chart-box">
       <h3>Wassertemperatur (°C)</h3>
       <canvas id="chartTEMP"></canvas>
     </div>
@@ -47,6 +51,7 @@
     cl:    { line: "#2bb673", fill: "rgba(43,182,115,0.12)" },
     ta:    { line: "#e0a52b", fill: "rgba(224,165,43,0.12)" },
     cya:   { line: "#c77dff", fill: "rgba(199,125,255,0.12)" },
+    orp:   { line: "#f6c000", fill: "rgba(246,192,0,0.12)" },
     temp:  { line: "#ff7875", fill: "rgba(255,120,117,0.12)" },
   };
 
@@ -91,6 +96,7 @@
   mk("chartCL",   "Freies Chlor",d.free_cl,     COLORS.cl);
   mk("chartTA",   "TA",          d.ta,          COLORS.ta);
   mk("chartCYA",  "CYA",         d.cya,         COLORS.cya);
+  mk("chartORP",  "ORP",         d.orp,         COLORS.orp);
   mk("chartTEMP", "Temperatur",  d.temperature, COLORS.temp);
 })();
 </script>

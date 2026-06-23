@@ -120,6 +120,7 @@ async def add_measurement(request: Request, db: Session = Depends(get_db)):
         "total_cl": _parse_float(form.get("total_cl")),
         "ta": _parse_float(form.get("ta")),
         "cya": _parse_float(form.get("cya")),
+        "orp": _parse_float(form.get("orp")),
         "temperature": _parse_float(form.get("temperature")),
         "note": (form.get("note") or "").strip() or None,
     }
@@ -200,6 +201,7 @@ def trend_data(db: Session = Depends(get_db)):
         "free_cl": [m.free_cl for m in measurements],
         "ta": [m.ta for m in measurements],
         "cya": [m.cya for m in measurements],
+        "orp": [m.orp for m in measurements],
         "temperature": [m.temperature for m in measurements],
     }
 
@@ -260,6 +262,45 @@ def delete_pump_log(log_id: int, request: Request, db: Session = Depends(get_db)
     if entry:
         crud.delete_pump_log(db, entry)
     return _redirect(request, "/pump-log")
+
+
+# --------------------------------------------------------------------------
+# Säure-Dosierung (pH-Minus-Pumpe)
+# --------------------------------------------------------------------------
+
+@app.get("/dosing", response_class=HTMLResponse)
+def dosing_page(request: Request, db: Session = Depends(get_db)):
+    cfg = crud.get_config(db)
+    events = crud.list_dose_events(db, limit=50)
+    used_today = crud.dose_total_ml_today(db)
+    remaining = crud.dose_budget_remaining_ml(db, cfg)
+    latest = crud.latest_measurement(db)
+    pct = 0
+    if cfg.dose_max_ml_day:
+        pct = min(100, round(used_today / cfg.dose_max_ml_day * 100))
+    ctx = _base_context(request)
+    ctx.update(config=cfg, events=events, used_today=used_today,
+               remaining=remaining, budget_pct=pct, latest=latest)
+    return templates.TemplateResponse("dosing.html", ctx)
+
+
+@app.post("/dosing/toggle")
+async def dosing_toggle(request: Request, db: Session = Depends(get_db)):
+    """Not-Aus / Freigabe der automatischen Dosierung (ein Klick)."""
+    form = await request.form()
+    cfg = crud.get_config(db)
+    cfg.dosing_enabled = 1 if form.get("enable") == "1" else 0
+    db.commit()
+    pool_mqtt.publish_dose_command({
+        "dosing_enabled": bool(cfg.dosing_enabled),
+        "ph_target": cfg.ph_target,
+        "ph_dose_deadband": cfg.ph_dose_deadband,
+        "ph_dose_floor": cfg.ph_dose_floor,
+        "dose_ml_per_shot": cfg.dose_ml_per_shot,
+        "dose_max_ml_day": cfg.dose_max_ml_day,
+        "dose_wait_minutes": cfg.dose_wait_minutes,
+    })
+    return _redirect(request, "/dosing")
 
 
 # --------------------------------------------------------------------------
@@ -419,6 +460,10 @@ async def update_config(request: Request, db: Session = Depends(get_db)):
         "ta_min", "ta_target", "ta_max",
         "cya_min", "cya_target", "cya_max",
         "cya_warning_level", "cya_dilution_target", "backwash_interval_hours",
+        "orp_min", "orp_target", "orp_max",
+        "acid_concentration_pct", "dose_ml_per_shot", "dose_max_ml_day",
+        "dose_pump_ml_per_min", "dose_wait_minutes", "ph_dose_deadband",
+        "ph_dose_floor",
     ]
     for field in float_fields:
         val = _parse_float(form.get(field))
@@ -428,7 +473,18 @@ async def update_config(request: Request, db: Session = Depends(get_db)):
     if name:
         cfg.name = name
     cfg.fc_min_dynamic = 1 if form.get("fc_min_dynamic") else 0
+    cfg.dosing_enabled = 1 if form.get("dosing_enabled") else 0
     db.commit()
+    # Sollwerte/Freigabe an den ESP32-Dosiercontroller spiegeln (falls MQTT aktiv).
+    pool_mqtt.publish_dose_command({
+        "dosing_enabled": bool(cfg.dosing_enabled),
+        "ph_target": cfg.ph_target,
+        "ph_dose_deadband": cfg.ph_dose_deadband,
+        "ph_dose_floor": cfg.ph_dose_floor,
+        "dose_ml_per_shot": cfg.dose_ml_per_shot,
+        "dose_max_ml_day": cfg.dose_max_ml_day,
+        "dose_wait_minutes": cfg.dose_wait_minutes,
+    })
     return _redirect(request, "/config")
 
 
@@ -560,6 +616,7 @@ def api_latest(db: Session = Depends(get_db)):
         "total_cl": m.total_cl,
         "ta": m.ta,
         "cya": m.cya,
+        "orp": m.orp,
         "temperature": m.temperature,
     }
 
@@ -593,6 +650,63 @@ async def api_ingest(request: Request, db: Session = Depends(get_db),
         "id": measurement.id,
         "measured_at": measurement.measured_at.isoformat(),
         "source": measurement.source,
+    }, status_code=201)
+
+
+@app.get("/api/dosing-config")
+def api_dosing_config(db: Session = Depends(get_db),
+                      x_api_key: str | None = Header(default=None)):
+    """Sollwerte/Schutzgrenzen für den ESP32-Dosiercontroller (Pull-Variante).
+
+    Der Controller kann diese Werte zyklisch abrufen, statt sie fest in der
+    Firmware zu hinterlegen. Enthält auch das verbleibende Tagesbudget, damit
+    der ESP die harte Obergrenze kennt, selbst wenn er zwischendurch neu startet.
+    """
+    if settings.ingest_token and x_api_key != settings.ingest_token:
+        return JSONResponse({"detail": "Ungültiger oder fehlender API-Key."}, status_code=401)
+    cfg = crud.get_config(db)
+    return {
+        "dosing_enabled": bool(cfg.dosing_enabled),
+        "ph_target": cfg.ph_target,
+        "ph_max": cfg.ph_max,
+        "ph_dose_deadband": cfg.ph_dose_deadband,
+        "ph_dose_floor": cfg.ph_dose_floor,
+        "dose_ml_per_shot": cfg.dose_ml_per_shot,
+        "dose_max_ml_day": cfg.dose_max_ml_day,
+        "dose_pump_ml_per_min": cfg.dose_pump_ml_per_min,
+        "dose_wait_minutes": cfg.dose_wait_minutes,
+        "dosed_ml_today": crud.dose_total_ml_today(db),
+        "budget_remaining_ml": crud.dose_budget_remaining_ml(db, cfg),
+    }
+
+
+@app.post("/api/dose-events")
+async def api_dose_event(request: Request, db: Session = Depends(get_db),
+                         x_api_key: str | None = Header(default=None)):
+    """Nimmt einen ausgeführten Dosier-Stoß vom ESP32-Controller entgegen.
+
+    Beispiel-Body: {"ml": 100, "pump_seconds": 100, "ph_before": 7.6,
+                    "ph_target": 7.2, "trigger": "auto", "source": "esp32"}
+    """
+    if settings.ingest_token and x_api_key != settings.ingest_token:
+        return JSONResponse({"detail": "Ungültiger oder fehlender API-Key."}, status_code=401)
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"detail": "Ungültiges JSON."}, status_code=400)
+    if not isinstance(payload, dict):
+        return JSONResponse({"detail": "JSON-Objekt erwartet."}, status_code=400)
+
+    ev = crud.ingest_dose_event(db, payload)
+    if ev is None:
+        return JSONResponse({"detail": "Feld 'ml' fehlt oder ist ungültig."}, status_code=400)
+    cfg = crud.get_config(db)
+    return JSONResponse({
+        "status": "ok",
+        "id": ev.id,
+        "dosed_at": ev.dosed_at.isoformat(),
+        "dosed_ml_today": crud.dose_total_ml_today(db),
+        "budget_remaining_ml": crud.dose_budget_remaining_ml(db, cfg),
     }, status_code=201)
 
 

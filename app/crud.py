@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .models import (
-    Chemical, ChecklistCheck, ChecklistRun, Measurement,
+    Chemical, ChecklistCheck, ChecklistRun, DoseEvent, Measurement,
     PoolConfig, PumpLog, TabletDispenser,
 )
 
@@ -16,6 +16,12 @@ DEFAULT_CHEMICALS = [
     dict(name="pH-Minus Granulat", purpose="ph_minus", unit="g",
          ref_dose_amount=100, ref_volume_m3=10, ref_effect_delta=0.1,
          notes="Typisch: 100 g pro 10 m³ senken den pH-Wert um ca. 0,1."),
+    dict(name="pH-Minus Schwefelsäure 15 % (flüssig)", purpose="ph_minus", unit="ml",
+         ref_dose_amount=100, ref_volume_m3=10, ref_effect_delta=0.1,
+         active_ingredient_pct=15,
+         notes="Dosierpumpe (Quetschschlauch). Richtwert: ~100 ml 15%ige Säure "
+               "pro 10 m³ senken den pH um ca. 0,1 (TA-abhängig – immer nachmessen!). "
+               "ACHTUNG: Säure immer ins Wasser geben, nie umgekehrt. Schutzbrille/-handschuhe."),
     dict(name="pH-Plus Granulat", purpose="ph_plus", unit="g",
          ref_dose_amount=100, ref_volume_m3=10, ref_effect_delta=0.1,
          notes="Typisch: 100 g pro 10 m³ heben den pH-Wert um ca. 0,1."),
@@ -118,7 +124,7 @@ def create_measurement(db: Session, data: dict) -> Measurement:
     return m
 
 
-INGEST_FLOAT_FIELDS = ("ph", "free_cl", "total_cl", "ta", "cya", "temperature")
+INGEST_FLOAT_FIELDS = ("ph", "free_cl", "total_cl", "ta", "cya", "orp", "temperature")
 
 
 def ingest_measurement(db: Session, payload: dict) -> Measurement | None:
@@ -172,6 +178,96 @@ def list_measurements_asc(db: Session, limit: int = 90) -> list[Measurement]:
 def delete_measurement(db: Session, m: Measurement) -> None:
     db.delete(m)
     db.commit()
+
+
+# --- Säure-Dosierung (pH-Minus-Pumpe) ------------------------------------
+
+def create_dose_event(db: Session, data: dict) -> DoseEvent:
+    ev = DoseEvent(**data)
+    db.add(ev)
+    db.commit()
+    db.refresh(ev)
+    return ev
+
+
+def ingest_dose_event(db: Session, payload: dict) -> DoseEvent | None:
+    """Speichert einen Dosier-Stoß, den der ESP32-Controller meldet.
+
+    Erwartete Felder (alle außer ``ml`` optional): ml, pump_seconds, ph_before,
+    ph_target, trigger ("auto"|"manual"|"fault"), source, note, dosed_at.
+    Bucht zusätzlich den gemeldeten Verbrauch vom Lagerbestand der
+    Säure-Chemikalie ab, falls eine flüssige pH-Minus-Chemikalie existiert.
+    """
+    try:
+        ml = float(payload.get("ml"))
+    except (TypeError, ValueError):
+        return None
+    if ml < 0:
+        return None
+
+    data: dict = {
+        "source": str(payload.get("source") or "esp32")[:20],
+        "ml": ml,
+        "purpose": "ph_minus",
+        "trigger": str(payload.get("trigger") or "auto")[:12],
+    }
+    for fld in ("pump_seconds", "ph_before", "ph_target"):
+        val = payload.get(fld)
+        if val in (None, ""):
+            continue
+        try:
+            data[fld] = float(val)
+        except (TypeError, ValueError):
+            continue
+    note = payload.get("note")
+    if note:
+        data["note"] = str(note)[:500]
+    dosed_at = payload.get("dosed_at")
+    if dosed_at:
+        try:
+            data["dosed_at"] = datetime.fromisoformat(str(dosed_at))
+        except ValueError:
+            pass
+
+    ev = create_dose_event(db, data)
+
+    # Verbrauch vom Lager abziehen (nur bei tatsächlich gepumpter Menge).
+    if ml > 0:
+        acid = db.scalars(
+            select(Chemical).where(
+                Chemical.purpose == "ph_minus", Chemical.unit == "ml"
+            ).order_by(Chemical.id)
+        ).first()
+        if acid and acid.stock_g is not None:
+            adjust_chemical_stock(db, acid, -ml)
+    return ev
+
+
+def _today_bounds() -> tuple[datetime, datetime]:
+    """Heutiger Tag in UTC (für Tagesmengen-Summe)."""
+    now = datetime.now(timezone.utc)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start, now
+
+
+def dose_total_ml_today(db: Session) -> float:
+    """Summe der heute (UTC) dosierten Säuremenge in ml."""
+    start, _ = _today_bounds()
+    rows = db.scalars(
+        select(DoseEvent).where(DoseEvent.dosed_at >= start)
+    ).all()
+    return round(sum(r.ml for r in rows), 1)
+
+
+def dose_budget_remaining_ml(db: Session, cfg: PoolConfig) -> float:
+    """Verbleibendes Tagesbudget (ml) bis zur harten Obergrenze."""
+    used = dose_total_ml_today(db)
+    return max(0.0, (cfg.dose_max_ml_day or 0.0) - used)
+
+
+def list_dose_events(db: Session, limit: int = 50) -> list[DoseEvent]:
+    stmt = select(DoseEvent).order_by(DoseEvent.dosed_at.desc()).limit(limit)
+    return list(db.scalars(stmt).all())
 
 
 # --- Tabletten-Dosierer --------------------------------------------------

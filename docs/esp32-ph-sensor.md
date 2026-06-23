@@ -1,7 +1,14 @@
-# pH-Sonde per ESP32 anbinden (ESPHome)
+# pH- & ORP-Sonde per ESP32 anbinden (ESPHome)
 
-Diese Anleitung bindet eine **analoge pH-Elektrode** (z. B. Apera 201-C, BNC)
-über ein **pH-Frontend-Board** und einen **ESP32** an PoolSurveylance an.
+Diese Anleitung bindet eine **analoge pH-Elektrode** (BNC) und – optional auf
+demselben ESP32 – eine **ORP/Redox-Elektrode** (BNC) über je ein
+**Frontend-Board** an PoolSurveylance an.
+
+> **ORP/Redox** misst die Desinfektionskraft (mV) und korreliert mit dem
+> freien Chlor. Echte Freichlor-Sensorik ist teuer; ORP ist der bezahlbare
+> Standard. Soll zusätzlich **automatisch Säure dosiert** werden (pH-Minus per
+> Quetschschlauchpumpe), siehe **`docs/esp32-dosing-controller.md`** – die
+> dortige Sicherheitslogik baut direkt auf dieser Sensoranbindung auf.
 
 ```
 pH-Elektrode (BNC)  ──►  pH-Frontend-Board  ──►  ESP32 (ADC)  ──►  WLAN
@@ -22,11 +29,16 @@ pH-Elektrode (BNC)  ──►  pH-Frontend-Board  ──►  ESP32 (ADC)  ──
 
 | Frontend-Board | ESP32 |
 |---|---|
-| `V+` / `VCC` | `3V3` (oder `5V`, je nach Board) |
-| `GND` | `GND` |
-| `Po` / `A0` (Analog-Ausgang) | `GPIO34` (ADC1, nur Eingang) |
+| pH `V+` / `VCC` | `3V3` (oder `5V`, je nach Board) |
+| pH `GND` | `GND` |
+| pH `Po` / `A0` (Analog-Ausgang) | `GPIO34` (ADC1, nur Eingang) |
+| ORP `V+` / `VCC` | `3V3` / `5V` |
+| ORP `GND` | `GND` |
+| ORP `Po` / `A0` | `GPIO35` (ADC1, nur Eingang) |
 
-Die Elektrode kommt per BNC ans Frontend-Board.
+Die jeweilige Elektrode kommt per BNC ans zugehörige Frontend-Board.
+**Wichtig:** ADC1-Pins (GPIO32–39) verwenden – ADC2 ist bei aktivem WLAN
+blockiert.
 
 ## 2. ESPHome-Konfiguration
 
@@ -67,6 +79,30 @@ sensor:
           - 1.50 -> 7.00     # <- hier deine pH-7-Spannung eintragen
           - 1.80 -> 4.01     # <- hier deine pH-4-Spannung eintragen
 
+  # --- ORP/Redox über zweiten Analog-Eingang (optional) ---
+  - platform: adc
+    pin: GPIO35
+    name: "Pool ORP (Rohspannung)"
+    id: orp_voltage
+    attenuation: 11db
+    update_interval: 30s
+    filters:
+      - median:
+          window_size: 7
+          send_every: 7
+      - calibrate_linear:
+          # gemessene_Spannung -> ORP (mV); mit 468-mV-Prüflösung kalibrieren.
+          - 1.50 -> 0       # <- Spannung bei 0 mV (Kurzschluss/Nulllösung)
+          - 2.07 -> 468     # <- Spannung in 468-mV-Pufferlösung
+
+  - platform: template
+    name: "Pool ORP"
+    id: orp_value
+    unit_of_measurement: "mV"
+    accuracy_decimals: 0
+    lambda: 'return id(orp_voltage).state;'
+    update_interval: 300s
+
   - platform: template
     name: "Pool pH"
     id: ph_value
@@ -81,6 +117,7 @@ sensor:
             topic: poolsurveylance/ingest
             payload: |
               root["ph"] = id(ph_value).state;
+              root["orp"] = id(orp_value).state;
               root["source"] = "esp32";
 
         # ===== Variante B: HTTP-POST direkt an die App =====
@@ -92,6 +129,7 @@ sensor:
               X-API-Key: !secret pool_ingest_token   # nur falls Token gesetzt
             json: |
               root["ph"] = id(ph_value).state;
+              root["orp"] = id(orp_value).state;
               root["source"] = "esp32";
 
 # Für Variante A:
@@ -146,9 +184,12 @@ und **Trends**.
 
 - **Throttling:** Schicke Werte nicht im Sekundentakt – sonst wächst die
   Datenbank stark. Alle 5–15 Minuten reicht für die pH-Überwachung.
-- **Felder:** Erlaubt sind `ph`, `free_cl`, `total_cl`, `ta`, `cya`,
+- **Felder:** Erlaubt sind `ph`, `free_cl`, `total_cl`, `ta`, `cya`, `orp`,
   `temperature` (plus `source`, `note`, `measured_at`). Es muss mindestens ein
   Messwert enthalten sein.
+- **ORP-Kalibrierung:** Mit einer **ORP-Prüflösung** (z. B. 468 mV) die
+  Rohspannung ablesen und bei `calibrate_linear` eintragen. ORP driftet
+  weniger als pH, sollte aber gelegentlich geprüft werden.
 - **Temperaturkompensation:** Die Apera 201-C hat keinen Temperaturfühler.
   Für höhere Genauigkeit einen Wassertemperatur-Sensor (z. B. DS18B20)
   ergänzen und `temperature` mitsenden.

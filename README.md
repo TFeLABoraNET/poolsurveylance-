@@ -206,10 +206,15 @@ Dockerfile, docker-compose.yml
 ## Roadmap (offen gehaltene Ausbaustufen)
 
 - [x] **Schritt 1:** Manuelle Messwerte + Dosiervorschlag, Docker, HA-Anbindung
-- [x] **Schritt 2:** Sensor-Eingang für ESP32-Sonden – Werte automatisch per
-      MQTT (`poolsurveylance/ingest`) **oder** HTTP (`POST /api/measurements`)
-      einspeisen (Quelle `esp32`). Anleitung: [`docs/esp32-ph-sensor.md`](docs/esp32-ph-sensor.md).
-- [ ] **Schritt 3:** Automatische pH-Dosierung (Dosierpumpe über ESP32/HA).
+- [x] **Schritt 2:** Sensor-Eingang für ESP32-Sonden – Werte (inkl. **ORP/Redox**)
+      automatisch per MQTT (`poolsurveylance/ingest`) **oder** HTTP
+      (`POST /api/measurements`) einspeisen (Quelle `esp32`). Anleitung:
+      [`docs/esp32-ph-sensor.md`](docs/esp32-ph-sensor.md).
+- [x] **Schritt 3:** Automatische pH-Minus-Dosierung (Schwefelsäure per
+      Quetschschlauchpumpe über ESP32). App führt Sollwerte/Schutzgrenzen,
+      protokolliert jeden Dosierstoß (`POST /api/dose-events`), begrenzt die
+      Tagesmenge und bietet Not-Aus (Tab **Dosierung**). Sicherheits-Logik &
+      ESPHome-Beispiel: [`docs/esp32-dosing-controller.md`](docs/esp32-dosing-controller.md).
 
 Die Architektur ist darauf ausgelegt: Die Mess-Quelle ist bereits
 parametrisiert, die Chemie-Logik ist von der Eingabe getrennt, und MQTT
@@ -245,6 +250,19 @@ Externe Sonden (z. B. ESP32 mit pH-Elektrode) speisen Messwerte auf zwei Wegen e
 - **HTTP:** `POST /api/measurements` mit JSON `{"ph": 7.21, "source": "esp32"}`
 - **MQTT:** JSON-Payload an das Topic `<base_topic>/ingest` (Standard `poolsurveylance/ingest`)
 
-Erlaubte Felder: `ph`, `free_cl`, `total_cl`, `ta`, `cya`, `temperature`
+Erlaubte Felder: `ph`, `free_cl`, `total_cl`, `ta`, `cya`, `orp`, `temperature`
 (plus `source`, `note`, `measured_at`). Details & ESPHome-Beispiel:
 [`docs/esp32-ph-sensor.md`](docs/esp32-ph-sensor.md).
+
+### Automatische Säure-Dosierung (Schritt 3)
+
+Der ESP32-Dosiercontroller meldet jeden ausgeführten Stoß an die App:
+
+- **HTTP:** `POST /api/dose-events` mit JSON `{"ml": 100, "ph_before": 7.6, "trigger": "auto"}`
+- **MQTT:** JSON-Payload an `<base_topic>/dose` (Standard `poolsurveylance/dose`)
+- **Sollwerte/Budget abfragen:** `GET /api/dosing-config`
+
+Die App protokolliert die Dosierungen (Tab **Dosierung**), zieht den Verbrauch
+vom Säure-Lager ab und erzwingt eine Tages-Höchstmenge. Die eigentliche,
+mehrfach verriegelte Regelung läuft autonom auf dem ESP32 –
+[`docs/esp32-dosing-controller.md`](docs/esp32-dosing-controller.md).

@@ -31,6 +31,7 @@ _SENSORS = {
     "total_cl": ("Pool Gesamtchlor", "mg/l", None, "mdi:flask-outline"),
     "ta": ("Pool Alkalinität", "mg/l", None, "mdi:beaker"),
     "cya": ("Pool Cyanursäure", "mg/l", None, "mdi:shield-sun"),
+    "orp": ("Pool Redox/ORP", "mV", "voltage", "mdi:flash"),
     "temperature": ("Pool Wassertemperatur", "°C", "temperature", "mdi:thermometer"),
 }
 
@@ -58,6 +59,16 @@ class PoolMqtt:
     def _ingest_topic(self) -> str:
         # Sonden veröffentlichen hier ihre Messwerte als JSON.
         return f"{settings.mqtt_base_topic}/ingest"
+
+    @property
+    def _dose_topic(self) -> str:
+        # Der Dosiercontroller meldet hier ausgeführte Dosier-Stöße als JSON.
+        return f"{settings.mqtt_base_topic}/dose"
+
+    @property
+    def _command_topic(self) -> str:
+        # Hierüber spiegelt die App Sollwerte/Freigaben an den ESP32-Controller.
+        return f"{settings.mqtt_base_topic}/command"
 
     # --- Lifecycle --------------------------------------------------------
 
@@ -99,13 +110,15 @@ class PoolMqtt:
         logger.info("Mit MQTT-Broker verbunden.")
         client.publish(self._avail_topic, "online", retain=True)
         self._publish_discovery()
-        # Auf Sensor-Eingang lauschen (ESP32-Sonden o. Ä.)
+        # Auf Sensor-Eingang und Dosier-Meldungen lauschen (ESP32 o. Ä.)
         client.on_message = self._on_message
         client.subscribe(self._ingest_topic, qos=0)
-        logger.info("Lausche auf Sensor-Eingang: %s", self._ingest_topic)
+        client.subscribe(self._dose_topic, qos=0)
+        logger.info("Lausche auf Sensor-Eingang: %s und Dosier-Meldungen: %s",
+                    self._ingest_topic, self._dose_topic)
 
     def _on_message(self, client, userdata, msg) -> None:
-        """Verarbeitet eingehende Sensor-Messwerte (JSON-Payload)."""
+        """Verarbeitet eingehende JSON-Nachrichten (Messwerte oder Dosier-Stöße)."""
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as exc:
@@ -114,6 +127,12 @@ class PoolMqtt:
         if not isinstance(payload, dict):
             logger.warning("MQTT-Ingest: JSON-Objekt erwartet.")
             return
+        if msg.topic == self._dose_topic:
+            self._handle_dose(payload)
+        else:
+            self._handle_measurement(payload)
+
+    def _handle_measurement(self, payload: dict) -> None:
         # Lazy-Import vermeidet Zirkelbezüge.
         from . import crud
         from .database import SessionLocal
@@ -130,6 +149,31 @@ class PoolMqtt:
             logger.warning("MQTT-Ingest fehlgeschlagen: %s", exc)
         finally:
             db.close()
+
+    def _handle_dose(self, payload: dict) -> None:
+        from . import crud
+        from .database import SessionLocal
+        db = SessionLocal()
+        try:
+            ev = crud.ingest_dose_event(db, payload)
+            if ev is None:
+                logger.warning("MQTT-Dose: kein gültiger Dosier-Stoß im Payload.")
+                return
+            logger.info("MQTT-Dose: %.1f ml protokolliert (Stoß #%s, %s).",
+                        ev.ml, ev.id, ev.trigger)
+        except Exception as exc:  # pragma: no cover - defensiv
+            logger.warning("MQTT-Dose fehlgeschlagen: %s", exc)
+        finally:
+            db.close()
+
+    def publish_dose_command(self, payload: dict) -> None:
+        """Spiegelt Sollwerte/Freigaben (retained) an den ESP32-Controller."""
+        if not self.enabled or self._client is None:
+            return
+        try:
+            self._client.publish(self._command_topic, json.dumps(payload), retain=True)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("MQTT-Command-Publish fehlgeschlagen: %s", exc)
 
     # --- Home-Assistant-Discovery ----------------------------------------
 

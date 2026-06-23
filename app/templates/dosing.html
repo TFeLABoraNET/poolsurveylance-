@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block nav_dosing %}active{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>Automatische pH-Minus-Dosierung
+    <small class="muted">Schwefelsäure · Quetschschlauchpumpe</small>
+  </h2>
+
+  <div class="dispenser-row">
+    <div class="dispenser-info">
+      {% if config.dosing_enabled %}
+        <div class="disp-count disp-ok">EIN</div>
+        <div class="muted small">Automatik aktiv</div>
+      {% else %}
+        <div class="disp-count disp-low">AUS</div>
+        <div class="muted small">Automatik gestoppt</div>
+      {% endif %}
+    </div>
+    <div class="dispenser-forms">
+      {% if config.dosing_enabled %}
+      <form method="post" action="{{ base }}/dosing/toggle" class="disp-form">
+        <input type="hidden" name="enable" value="0">
+        <button type="submit" class="btn" style="background:#c0392b;color:#fff">⛔ NOT-AUS / Stoppen</button>
+      </form>
+      {% else %}
+      <form method="post" action="{{ base }}/dosing/toggle" class="disp-form"
+            onsubmit="return confirm('Automatische Säure-Dosierung wirklich freigeben? Pumpe, Schlauch und Sonde müssen geprüft sein.');">
+        <input type="hidden" name="enable" value="1">
+        <button type="submit" class="btn primary">▶ Dosierung freigeben</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if config.dosing_enabled %}
+  <div class="flash warn" style="margin-top:.6rem">⚠ Die Automatik ist aktiv. Der ESP32 dosiert
+    eigenständig Säure, wenn der pH über {{ "%g"|format(config.ph_target + config.ph_dose_deadband) }} steigt.</div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Tagesbudget (Sicherheits-Obergrenze)</h2>
+  <p>
+    <strong>{{ "%g"|format(used_today) }} ml</strong> von max.
+    <strong>{{ "%g"|format(config.dose_max_ml_day) }} ml</strong> heute dosiert
+    · noch <strong>{{ "%g"|format(remaining) }} ml</strong> frei.
+  </p>
+  <div style="background:#e6e9ee;border-radius:6px;height:18px;overflow:hidden">
+    <div style="height:100%;width:{{ budget_pct }}%;
+                background:{% if budget_pct >= 100 %}#c0392b{% elif budget_pct >= 80 %}#e67e22{% else %}#2e86de{% endif %}"></div>
+  </div>
+  {% if remaining <= 0 %}
+  <div class="flash warn" style="margin-top:.5rem">⚠ Tagesbudget erreicht – der Controller dosiert
+    bis Mitternacht (UTC) nicht weiter. Wenn der pH trotzdem hoch bleibt, manuell prüfen
+    (Sonde, Säurekonzentration, evtl. zu hohe TA).</div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Aktuelle Lage</h2>
+  <div class="status-grid">
+    <div class="status status-{% if latest and latest.ph is not none and latest.ph > config.ph_max %}high{% elif latest and latest.ph is not none %}ok{% else %}unknown{% endif %}">
+      <div class="status-label">Letzter pH</div>
+      <div class="status-value">
+        {% if latest and latest.ph is not none %}{{ "%g"|format(latest.ph) }}{% else %}–{% endif %}
+      </div>
+      <div class="status-meta muted">Ziel {{ "%g"|format(config.ph_target) }}</div>
+    </div>
+    <div class="status status-ok">
+      <div class="status-label">Stoß-Menge</div>
+      <div class="status-value">{{ "%g"|format(config.dose_ml_per_shot) }} <span class="unit">ml</span></div>
+      <div class="status-meta muted">dann {{ "%g"|format(config.dose_wait_minutes) }} min warten</div>
+    </div>
+    <div class="status status-ok">
+      <div class="status-label">Sicherheitsboden</div>
+      <div class="status-value">{{ "%g"|format(config.ph_dose_floor) }} <span class="unit">pH</span></div>
+      <div class="status-meta muted">darunter nie dosieren</div>
+    </div>
+    <div class="status status-ok">
+      <div class="status-label">Säure</div>
+      <div class="status-value">{{ "%g"|format(config.acid_concentration_pct) }} <span class="unit">%</span></div>
+      <div class="status-meta muted">{{ "%g"|format(config.dose_pump_ml_per_min) }} ml/min Pumpe</div>
+    </div>
+  </div>
+  <p class="muted small" style="margin-top:.6rem">Sollwerte und Grenzen änderst du in den
+    <a href="{{ base }}/config">Einstellungen</a>. Die eigentliche Regelung läuft autonom auf dem
+    ESP32 – die App führt die Werte, protokolliert und begrenzt die Tagesmenge.</p>
+</section>
+
+<section class="card">
+  <h2>Dosier-Protokoll <small class="muted">letzte {{ events|length }} Stöße</small></h2>
+  {% if events %}
+  <table class="dose-table">
+    <thead>
+      <tr><th>Zeitpunkt</th><th class="right">Menge</th><th class="right">pH vorher</th><th>Auslöser</th></tr>
+    </thead>
+    <tbody>
+      {% for e in events %}
+      <tr>
+        <td>{{ e.dosed_at.strftime("%d.%m.%Y %H:%M") }}
+          {% if e.note %}<div class="muted small">{{ e.note }}</div>{% endif %}
+        </td>
+        <td class="right amount">{{ "%g"|format(e.ml) }} ml</td>
+        <td class="right">{% if e.ph_before is not none %}{{ "%g"|format(e.ph_before) }}{% else %}–{% endif %}</td>
+        <td>
+          {% if e.trigger == "fault" %}<span style="color:#c0392b">⚠ Fehler</span>
+          {% elif e.trigger == "manual" %}Hand
+          {% else %}Automatik{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Noch keine Dosierungen protokolliert.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>⚠ Sicherheit</h2>
+  <ul class="muted small" style="line-height:1.6">
+    <li>Der ESP32 dosiert <strong>nur bei laufender Umwälzpumpe</strong> (Strömungswächter) und
+      <strong>nie unter pH {{ "%g"|format(config.ph_dose_floor) }}</strong>.</li>
+    <li><strong>Pulsen &amp; warten:</strong> kleiner Stoß ({{ "%g"|format(config.dose_ml_per_shot) }} ml),
+      dann {{ "%g"|format(config.dose_wait_minutes) }} min Durchmischen, erst dann erneut messen/dosieren –
+      verhindert Überdosierung.</li>
+    <li>Säure immer <strong>ins Wasser</strong> geben, nie umgekehrt. Schlauchmaterial säurefest
+      (z. B. Viton/FKM), Schutzbrille &amp; Handschuhe. Verdünnte Säure ({{ "%g"|format(config.acid_concentration_pct) }} %)
+      ist gutmütiger zu regeln als konzentrierte.</li>
+    <li>Aufbau und ESPHome-Regelung mit allen Verriegelungen: siehe
+      <code>docs/esp32-dosing-controller.md</code>.</li>
+  </ul>
+</section>
+
+{% endblock %}
