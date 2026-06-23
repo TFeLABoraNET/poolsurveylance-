@@ -1,7 +1,7 @@
 # Home-Assistant-Add-on-Konfiguration für PoolSurveylance.
 # Nutzt das per GitHub Actions vorgebaute Image aus der GHCR.
 name: PoolSurveylance
-version: "0.4.0"
+version: "0.5.0"
 slug: poolsurveylance
 description: Pool-Pflege-Assistent – Messwerte erfassen & Dosiervorschläge erhalten
 url: https://github.com/TFeLABoraNET/poolsurveylance-
@@ -29,9 +29,11 @@ options:
   mqtt_port: 1883
   mqtt_username: ""
   mqtt_password: ""
+  ingest_token: ""
 schema:
   mqtt_enabled: bool
   mqtt_host: str
   mqtt_port: port
   mqtt_username: str?
   mqtt_password: password?
+  ingest_token: password?

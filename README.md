@@ -206,8 +206,9 @@ Dockerfile, docker-compose.yml
 ## Roadmap (offen gehaltene Ausbaustufen)
 
 - [x] **Schritt 1:** Manuelle Messwerte + Dosiervorschlag, Docker, HA-Anbindung
-- [ ] **Schritt 2:** ESP32 mit pH-/Chlor-Sonden – Werte automatisch per MQTT
-      einspeisen (Quelle `esp32` ist im Datenmodell bereits vorgesehen).
+- [x] **Schritt 2:** Sensor-Eingang für ESP32-Sonden – Werte automatisch per
+      MQTT (`poolsurveylance/ingest`) **oder** HTTP (`POST /api/measurements`)
+      einspeisen (Quelle `esp32`). Anleitung: [`docs/esp32-ph-sensor.md`](docs/esp32-ph-sensor.md).
 - [ ] **Schritt 3:** Automatische pH-Dosierung (Dosierpumpe über ESP32/HA).
 
 Die Architektur ist darauf ausgelegt: Die Mess-Quelle ist bereits
@@ -235,3 +236,15 @@ pytest -q
 | `POOL_MQTT_BASE_TOPIC` | `poolsurveylance` | Basis-Topic der Zustände |
 | `POOL_MQTT_DISCOVERY_PREFIX` | `homeassistant` | HA-Discovery-Prefix |
 | `POOL_DEVICE_ID` | `poolsurveylance` | Geräte-ID in Home Assistant |
+| `POOL_INGEST_TOKEN` | – | Optionaler Token für `POST /api/measurements` (Header `X-API-Key`) |
+
+### Sensor-Eingang (Schritt 2)
+
+Externe Sonden (z. B. ESP32 mit pH-Elektrode) speisen Messwerte auf zwei Wegen ein:
+
+- **HTTP:** `POST /api/measurements` mit JSON `{"ph": 7.21, "source": "esp32"}`
+- **MQTT:** JSON-Payload an das Topic `<base_topic>/ingest` (Standard `poolsurveylance/ingest`)
+
+Erlaubte Felder: `ph`, `free_cl`, `total_cl`, `ta`, `cya`, `temperature`
+(plus `source`, `note`, `measured_at`). Details & ESPHome-Beispiel:
+[`docs/esp32-ph-sensor.md`](docs/esp32-ph-sensor.md).

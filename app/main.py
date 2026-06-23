@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Header, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -562,6 +562,38 @@ def api_latest(db: Session = Depends(get_db)):
         "cya": m.cya,
         "temperature": m.temperature,
     }
+
+
+@app.post("/api/measurements")
+async def api_ingest(request: Request, db: Session = Depends(get_db),
+                     x_api_key: str | None = Header(default=None)):
+    """Nimmt Messwerte von externen Sonden (ESP32 etc.) per JSON entgegen.
+
+    Beispiel-Body: {"ph": 7.21, "temperature": 26.4, "source": "esp32"}
+    Ist POOL_INGEST_TOKEN gesetzt, muss der Header "X-API-Key" passen.
+    """
+    if settings.ingest_token and x_api_key != settings.ingest_token:
+        return JSONResponse({"detail": "Ungültiger oder fehlender API-Key."}, status_code=401)
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"detail": "Ungültiges JSON."}, status_code=400)
+    if not isinstance(payload, dict):
+        return JSONResponse({"detail": "JSON-Objekt erwartet."}, status_code=400)
+
+    measurement = crud.ingest_measurement(db, payload)
+    if measurement is None:
+        return JSONResponse(
+            {"detail": "Kein gültiger Messwert enthalten (ph, free_cl, total_cl, ta, cya, temperature)."},
+            status_code=400,
+        )
+    pool_mqtt.publish_measurement(measurement)
+    return JSONResponse({
+        "status": "ok",
+        "id": measurement.id,
+        "measured_at": measurement.measured_at.isoformat(),
+        "source": measurement.source,
+    }, status_code=201)
 
 
 @app.get("/health")

@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     # Eindeutige Geräte-ID in Home Assistant
     device_id: str = "poolsurveylance"
 
+    # --- Sensor-Eingang (ESP32 / externe Sonden) ---
+    # Optionaler Token: ist er gesetzt, müssen HTTP-POSTs an /api/measurements
+    # den Header "X-API-Key: <token>" mitschicken. Leer = ungesichert (nur im
+    # vertrauenswürdigen Heimnetz empfohlen).
+    ingest_token: str = ""
+
 
 # Optionen, die ein Home-Assistant-Add-on über /data/options.json setzen kann.
 # Schlüssel = Name in der Add-on-Konfiguration, Wert = Attribut in Settings.
@@ -54,6 +60,7 @@ _HA_OPTION_MAP = {
     "mqtt_base_topic": "mqtt_base_topic",
     "mqtt_discovery_prefix": "mqtt_discovery_prefix",
     "device_id": "device_id",
+    "ingest_token": "ingest_token",
 }
 
 

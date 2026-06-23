@@ -54,6 +54,11 @@ class PoolMqtt:
     def _avail_topic(self) -> str:
         return f"{settings.mqtt_base_topic}/availability"
 
+    @property
+    def _ingest_topic(self) -> str:
+        # Sonden veröffentlichen hier ihre Messwerte als JSON.
+        return f"{settings.mqtt_base_topic}/ingest"
+
     # --- Lifecycle --------------------------------------------------------
 
     def start(self) -> None:
@@ -94,6 +99,37 @@ class PoolMqtt:
         logger.info("Mit MQTT-Broker verbunden.")
         client.publish(self._avail_topic, "online", retain=True)
         self._publish_discovery()
+        # Auf Sensor-Eingang lauschen (ESP32-Sonden o. Ä.)
+        client.on_message = self._on_message
+        client.subscribe(self._ingest_topic, qos=0)
+        logger.info("Lausche auf Sensor-Eingang: %s", self._ingest_topic)
+
+    def _on_message(self, client, userdata, msg) -> None:
+        """Verarbeitet eingehende Sensor-Messwerte (JSON-Payload)."""
+        try:
+            payload = json.loads(msg.payload.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError) as exc:
+            logger.warning("MQTT-Ingest: ungültiges JSON (%s).", exc)
+            return
+        if not isinstance(payload, dict):
+            logger.warning("MQTT-Ingest: JSON-Objekt erwartet.")
+            return
+        # Lazy-Import vermeidet Zirkelbezüge.
+        from . import crud
+        from .database import SessionLocal
+        db = SessionLocal()
+        try:
+            measurement = crud.ingest_measurement(db, payload)
+            if measurement is None:
+                logger.warning("MQTT-Ingest: kein gültiger Messwert im Payload.")
+                return
+            self.publish_measurement(measurement)
+            logger.info("MQTT-Ingest: Messung #%s gespeichert (Quelle %s).",
+                        measurement.id, measurement.source)
+        except Exception as exc:  # pragma: no cover - defensiv
+            logger.warning("MQTT-Ingest fehlgeschlagen: %s", exc)
+        finally:
+            db.close()
 
     # --- Home-Assistant-Discovery ----------------------------------------
 

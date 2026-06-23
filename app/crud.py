@@ -118,6 +118,42 @@ def create_measurement(db: Session, data: dict) -> Measurement:
     return m
 
 
+INGEST_FLOAT_FIELDS = ("ph", "free_cl", "total_cl", "ta", "cya", "temperature")
+
+
+def ingest_measurement(db: Session, payload: dict) -> Measurement | None:
+    """Erzeugt eine Messung aus einem Sensor-Payload (HTTP-POST oder MQTT).
+
+    Akzeptiert nur bekannte Felder, parst Zahlen tolerant und setzt die
+    Quelle standardmäßig auf "esp32". Gibt None zurück, wenn kein einziger
+    Messwert enthalten ist (dann wird nichts gespeichert).
+    """
+    data: dict = {"source": str(payload.get("source") or "esp32")[:20]}
+    has_value = False
+    for field in INGEST_FLOAT_FIELDS:
+        val = payload.get(field)
+        if val is None or val == "":
+            continue
+        try:
+            data[field] = float(val)
+            has_value = True
+        except (TypeError, ValueError):
+            continue
+    if not has_value:
+        return None
+
+    note = payload.get("note")
+    if note:
+        data["note"] = str(note)[:500]
+    measured_at = payload.get("measured_at")
+    if measured_at:
+        try:
+            data["measured_at"] = datetime.fromisoformat(str(measured_at))
+        except ValueError:
+            pass
+    return create_measurement(db, data)
+
+
 def latest_measurement(db: Session) -> Measurement | None:
     stmt = select(Measurement).order_by(Measurement.measured_at.desc()).limit(1)
     return db.scalars(stmt).first()

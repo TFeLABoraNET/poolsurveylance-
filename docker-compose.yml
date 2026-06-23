@@ -21,3 +21,7 @@ services:
       POOL_MQTT_DISCOVERY_PREFIX: "homeassistant"
       POOL_DEVICE_ID: "poolsurveylance"
       POOL_TIMEZONE: "Europe/Berlin"
+      # --- Sensor-Eingang (ESP32 / pH-Sonde) ---
+      # Optionaler Token zum Absichern von POST /api/measurements.
+      # Leer = ungesichert (nur im vertrauenswürdigen Heimnetz).
+      POOL_INGEST_TOKEN: ""
